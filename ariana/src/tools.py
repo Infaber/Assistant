@@ -82,3 +82,55 @@ async def home_assistant_request(context: RunContext, request: str) -> str:
     if not isinstance(speech, str) or not speech.strip():
         return "Home Assistant did not return a spoken response."
     return speech.strip()
+
+
+@function_tool
+async def weather_forecast(context: RunContext, location: str) -> str:
+    """Get the current forecast for a place using YR's location forecast API."""
+    location = location.strip()
+    if not location:
+        return "Tell me which place you want the weather for."
+
+    headers = {"User-Agent": "Ariana/1.0 local voice assistant"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+            geocode_response = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": location, "format": "jsonv2", "limit": 1},
+            )
+            geocode_response.raise_for_status()
+            places = geocode_response.json()
+            if not places:
+                return f"I couldn't find a location called {location}."
+
+            latitude = places[0]["lat"]
+            longitude = places[0]["lon"]
+            display_name = places[0].get("display_name", location).split(",")[0]
+            forecast_response = await client.get(
+                "https://api.met.no/weatherapi/locationforecast/2.0/compact",
+                params={"lat": latitude, "lon": longitude},
+            )
+            forecast_response.raise_for_status()
+            forecast = forecast_response.json()
+            current = forecast["properties"]["timeseries"][0]
+            details = current["data"]["instant"]["details"]
+            temperature = details["air_temperature"]
+            wind_speed = details["wind_speed"]
+            symbol = (
+                current["data"]
+                .get("next_1_hours", {})
+                .get("summary", {})
+                .get("symbol_code", "")
+            )
+    except httpx.HTTPStatusError:
+        return "The weather service returned an error. Please try again shortly."
+    except (httpx.RequestError, KeyError, IndexError, TypeError, ValueError):
+        return "I couldn't retrieve the weather right now. Please try again shortly."
+
+    conditions = (
+        symbol.replace("_", " ") if symbol else "current conditions unavailable"
+    )
+    return (
+        f"In {display_name}, it's {temperature:.0f} degrees Celsius with {conditions}. "
+        f"Wind is around {wind_speed:.0f} meters per second."
+    )
