@@ -15,7 +15,7 @@ from livekit.agents import (
 from livekit.plugins import ai_coustics, google
 
 from browser_tools import BrowserToolset
-from tools import search_web
+from tools import home_assistant_request, search_web
 
 logger = logging.getLogger("agent")
 
@@ -35,7 +35,7 @@ class Assistant(Agent):
                 language="en-GB",
                 api_key=GOOGLE_API_KEY,
             ),
-            tools=[search_web, BrowserToolset()],
+            tools=[search_web, home_assistant_request, BrowserToolset()],
             # To use a realtime model instead of a voice pipeline, replace the LLM
             # with a realtime model and remove the STT/TTS from the AgentSession
             # (Note: This is for OpenAI GPT-Live, the recommended speech-to-speech
@@ -88,6 +88,7 @@ class Assistant(Agent):
             - Use available tools when needed to answer accurately or complete a task.
             - Always use the web search tool when the user asks you to search, look something up, find information, check current facts, or show web results. Do not answer from memory first.
             - After a web search, summarize the useful results in plain spoken language and say when the search returned no useful results.
+            - Use the Home Assistant tool for natural-language smart-home requests, then report Home Assistant's response without inventing device state.
             - If the user asks you to search for something and show it on screen, use the browser search tool so the visible browser opens the results page.
             - Use the browser tools when the user asks you to open, read, or inspect a web page.
             - Browser access is isolated to this session and is read-only. Do not enter credentials, submit forms, make purchases, send messages, upload files, download files, or delete data.
