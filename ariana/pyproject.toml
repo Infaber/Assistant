@@ -52,3 +52,6 @@ ignore = ["E501"]  # Line too long (handled by formatter)
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.setuptools.package-data]
+mac_native = ["*.swift"]

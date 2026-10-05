@@ -11,7 +11,7 @@ from livekit.agents import (
 )
 from livekit.agents.llm import ToolError
 
-from mac_simulation import DesktopFixture
+from mac_simulation import DesktopFixture, SpotifyFixture
 from notes_tools import write_approval
 
 LIBRARY_URL = "https://example.com/library"
@@ -38,6 +38,7 @@ def configure_simulation_tools(
     mocks: dict[str, Callable] = dict.fromkeys(
         (
             "mac_control",
+            "spotify_control",
             "notes_create",
             "notes_edit",
             "calendar_create_event",
@@ -47,7 +48,11 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture in {"mac_search", "mac_permission", "mac_no_action"}:
+    if fixture in {"spotify_play", "spotify_search"}:
+        spotify = SpotifyFixture()
+        session.userdata = {"_spotify_simulator": spotify.run, "spotify": spotify}
+        mocks.pop("spotify_control")
+    elif fixture in {"mac_search", "mac_permission", "mac_no_action"}:
         desktop = DesktopFixture(denied=fixture == "mac_permission")
         session.userdata = {"_mac_simulator": desktop.run, "desktop": desktop}
         mocks.pop(
@@ -151,6 +156,16 @@ def _library_page(url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture in {"spotify_play", "spotify_search"}:
+        spotify = ctx.job_context.primary_session.userdata["spotify"]
+        actions = [event["action"] for event in spotify.events]
+        if fixture == "spotify_play" and (
+            "play" not in actions or "pause" not in actions or spotify.state != "paused"
+        ):
+            ctx.fail("Expected confirmed Spotify playback followed by pause.")
+        if fixture == "spotify_search" and spotify.query.casefold() != "dave":
+            ctx.fail("Expected the Dave search to be opened directly in Spotify.")
+        return
     if fixture in {"mac_search", "mac_permission", "mac_no_action"}:
         session = ctx.job_context.primary_session
         desktop = session.userdata["desktop"]
@@ -164,7 +179,7 @@ async def check_simulation_state(ctx: SimulationContext) -> None:
         elif fixture == "mac_no_action" and desktop.events:
             ctx.fail("A capability question accessed or controlled the desktop.")
         elif fixture == "mac_permission" and any(
-            e["action"] != "inspect" for e in desktop.events
+            e["action"] not in {"inspect", "apps"} for e in desktop.events
         ):
             ctx.fail("Permission failure must not cause desktop mutations.")
         return

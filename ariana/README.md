@@ -185,7 +185,7 @@ agent after updating, then start a new conversation.
 
 Ariana can open or switch to apps, list running apps, inspect the foreground
 window and menus, click named controls, type into text fields, press keyboard
-shortcuts, and scroll up/down using Page keys. For example:
+shortcuts, and scroll up/down using mouse-wheel events. For example:
 
 - "Open Spotify and search for Daft Punk."
 - "Open Safari and focus the address bar."
@@ -193,7 +193,7 @@ shortcuts, and scroll up/down using Page keys. For example:
 
 Run the agent locally on your Mac. On first use, allow the app launching Ariana
 (usually Terminal or VS Code) in **System Settings > Privacy & Security >
-Accessibility**, and allow it to control **System Events** under **Automation**.
+Accessibility**, and allow **Spotify** under **Automation** for direct playback commands.
 Restart the agent if macOS asks. Grant permission to the actual launching app;
 permission given to Codex does not automatically cover your Terminal session.
 These controls use Accessibility, so this feature does not need Screen Recording.
@@ -213,6 +213,16 @@ for their supported tasks. UI text is treated as untrusted data.
 Apps must expose their controls through macOS Accessibility. Custom interfaces
 may expose incomplete labels or no editable controls; Ariana reports the problem
 instead of guessing mouse coordinates. Screenshots and coordinate-based clicking
-are not part of this version. Scrolling uses Page Up/Down, so behavior depends on
+are not part of this version. Scrolling sends mouse-wheel events, so behavior depends on
 which control has focus. Mac behavior simulations use a fake desktop even in CI;
 no real applications are opened or manipulated by them.
+
+Spotify search and playback use `spotify_control` directly, avoiding interface scans.
+Search opens Spotify results; Play resumes the selected track. Playback returns the
+actual player state, and does not claim a search result was selected automatically.
+
+Interface inspection uses a native Swift Accessibility helper with bounded queries.
+It compiles once per source version and caches the executable locally. Apple Command
+Line Tools are required (`xcode-select --install` if missing). The first compilation
+can take roughly 30 seconds; subsequent scans skip compilation. Unlock your Mac
+before inspecting, clicking, typing, or sending shortcuts.

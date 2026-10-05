@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from livekit.agents import RunContext, function_tool
 
+from mac_native import run as run_native
+
 KEY_CODES = {
     "return": 36,
     "enter": 36,
@@ -30,83 +32,9 @@ MODIFIERS = {"command", "control", "option", "shift"}
 
 MAC_JXA = r"""
 function run(argv) {
-    const req = JSON.parse(argv[0]);
-    const se = Application('System Events');
-    function safe(fn, fallback) { try { const v=fn(); return v === undefined || v === null ? fallback : v; } catch(e) { return fallback; } }
-    function describe(n) {
-        const role = safe(()=>n.role(),'');
-        const subrole = safe(()=>n.subrole(),'');
-        const secure = /secure/i.test(role + subrole);
-        return {role:role, subrole:subrole, name:safe(()=>n.name(),''),
-            label:safe(()=>n.description(),''), enabled:safe(()=>n.enabled(),false),
-            secure:secure, value:secure ? '[protected]' : String(safe(()=>n.value(),'')).slice(0,200),
-            position:safe(()=>n.position(),[]), size:safe(()=>n.size(),[])};
-    }
-    function signature(n) {
-        const d=describe(n);
-        return JSON.stringify([d.role,d.subrole,d.name,d.label,d.position,d.size]);
-    }
-    if (req.action === 'open') {
-        Application(req.app_name).activate();
-        return JSON.stringify({success:true, message:'App opened or brought to the front.'});
-    }
-    if (req.action === 'apps') {
-        const processes=se.applicationProcesses.whose({backgroundOnly:false})();
-        return JSON.stringify({apps:processes.map(p=>({name:p.name(),pid:p.unixId(),frontmost:p.frontmost()}))});
-    }
-    const front = se.applicationProcesses.whose({frontmost:true})();
-    if (!front.length) return JSON.stringify({error:'No foreground app. Open the requested app first.'});
-    const p=front[0];
-    const windows=p.windows();
-    const windowTitle=windows.length ? safe(()=>windows[0].name(),'') : '';
-    if (req.action === 'inspect') {
-        const elements=[];
-        let truncated=false;
-        function walk(n,path,depth) {
-            if (elements.length >= 300) {truncated=true; return;}
-            const d=describe(n);
-            elements.push(Object.assign({id:'e'+elements.length,path:path,signature:signature(n)},d));
-            if (d.secure) return;
-            const children=safe(()=>n.uiElements(),[]);
-            if (depth >= 7) {if(children.length) truncated=true; return;}
-            for (let i=0;i<children.length;i++) walk(children[i],path.concat(i),depth+1);
-        }
-        if (windows.length) walk(windows[0],['window',0],0);
-        const menus=safe(()=>p.menuBars(),[]);
-        if (menus.length) walk(menus[0],['menu',0],0);
-        return JSON.stringify({app:p.name(),pid:p.unixId(),window:windowTitle,elements:elements,truncated:truncated});
-    }
-    if (p.unixId() !== req.pid || windowTitle !== req.window)
-        return JSON.stringify({error:'The foreground app or window changed. Inspect again before acting.'});
-    let target;
-    if (req.target) {
-        const path=req.target.path;
-        target=path[0] === 'window' ? windows[path[1]] : p.menuBars()[path[1]];
-        for (let i=2;i<path.length;i++) target=target.uiElements()[path[i]];
-        if (!target || signature(target) !== req.target.signature)
-            return JSON.stringify({error:'The target control changed. Inspect again before acting.'});
-        const d=describe(target);
-        if (!d.enabled || d.secure) return JSON.stringify({error:'This control is disabled or protected.'});
-    }
-    if (req.action === 'click') {
-        se.click(target);
-    } else if (req.action === 'type') {
-        const role=target.role();
-        if (['AXTextField','AXTextArea','AXComboBox','AXSearchField'].indexOf(role) === -1)
-            return JSON.stringify({error:'Choose an inspected editable text field.'});
-        target.focused=true;
-        if (!target.focused()) return JSON.stringify({error:'Could not focus the requested text field.'});
-        se.keystroke(req.text);
-    } else if (req.action === 'shortcut') {
-        const options={using:req.modifiers.map(m=>m+' down')};
-        if (req.key_code !== null) se.keyCode(req.key_code,options);
-        else se.keystroke(req.key,options);
-    } else if (req.action === 'scroll') {
-        for (let i=0;i<req.amount;i++) se.keyCode(req.direction === 'down' ? 121 : 116);
-    } else {
-        return JSON.stringify({error:'Unsupported Mac action.'});
-    }
-    return JSON.stringify({success:true,app:p.name(),message:'Action sent. Inspect again to verify the result.'});
+    const req=JSON.parse(argv[0]);
+    Application(req.app_name).activate();
+    return JSON.stringify({success:true,message:'App opened or brought to the front.'});
 }
 """
 
@@ -121,6 +49,8 @@ def _state(context: RunContext) -> dict:
 
 
 def _run_mac(request: dict) -> dict:
+    if request["action"] != "open":
+        return run_native(request)
     result = subprocess.run(
         ["osascript", "-l", "JavaScript", "-e", MAC_JXA, json.dumps(request)],
         capture_output=True,
@@ -146,7 +76,7 @@ async def _request(state: dict, request: dict) -> dict:
         }
     except (OSError, ValueError):
         return {
-            "error": "Could not access the Mac interface. In System Settings > Privacy & Security, allow Accessibility for the app running Ariana (Terminal or VS Code), and Automation access to System Events. A control may also have changed; inspect again after permissions are enabled."
+            "error": "Could not access the Mac interface. In System Settings > Privacy & Security, allow Accessibility for the app running Ariana (Terminal or VS Code), and allow Automation access to the app being opened if prompted. A control may also have changed; inspect again after permissions are enabled."
         }
 
 
@@ -165,13 +95,13 @@ async def mac_control(
 ) -> dict:
     """Control apps on the user's local Mac, only for requested tasks.
 
-    actions: apps lists running apps; open activates app_name; inspect reads the
-    current foreground window and menus, returning snapshot_id and labeled element
+    actions: apps lists running apps; open activates app_name; inspect quickly reads the
+    current foreground window and menus using native Accessibility, returning snapshot_id and labeled element
     IDs. click needs snapshot_id + element_id from inspect. type inserts text into
     an inspected editable field (same IDs; it does not submit). shortcut needs a
     snapshot_id, a single character or named key (return/tab/escape/arrows/backspace/
     delete/home/end/pageup/pagedown/space), and optional modifiers command/control/
-    option/shift. scroll uses snapshot_id, up/down, amount 1-10 pages via Page keys.
+    option/shift. scroll uses snapshot_id, up/down, amount 1-10 wheel steps.
     Open an app first to switch to it. Inspect before EVERY click/type/shortcut/
     scroll and inspect afterward to verify success; snapshots are consumed once
     and expire after 60 seconds. Never guess IDs or coordinates. Protected fields
@@ -247,7 +177,9 @@ async def mac_control(
         request.update(key=key, key_code=KEY_CODES.get(key), modifiers=modifiers)
     elif action == "scroll":
         if direction not in {"up", "down"} or not 1 <= amount <= 10:
-            return {"error": "Scroll direction must be up/down and amount 1-10 pages."}
+            return {
+                "error": "Scroll direction must be up/down and amount 1-10 wheel steps."
+            }
         request.update(direction=direction, amount=amount)
     # Consume before executing: even a timeout cannot blindly replay a UI action.
     state.pop("mac_snapshot", None)

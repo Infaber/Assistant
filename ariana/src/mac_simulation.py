@@ -11,9 +11,11 @@ class DesktopFixture:
 
     def run(self, request: dict) -> dict:
         self.events.append(dict(request))
+        if request["action"] == "apps":
+            return {"apps": [{"name": self.app, "pid": 77, "frontmost": True}]}
         if self.denied:
             return {
-                "error": "Accessibility and Automation access to System Events are denied. Enable them in macOS Privacy & Security."
+                "error": "Accessibility access is denied. Enable it in macOS Privacy & Security."
             }
         action = request["action"]
         if action == "open":
@@ -75,3 +77,31 @@ class DesktopFixture:
         elif action == "shortcut" and request["key"] in {"return", "enter"}:
             self.searched = True
         return {"success": True, "message": "Action sent; inspect to verify."}
+
+
+class SpotifyFixture:
+    def __init__(self):
+        self.events = []
+        self.state = "paused"
+        self.query = ""
+
+    def run(self, request):
+        self.events.append(dict(request))
+        action = request["action"]
+        if action == "search":
+            self.query = request["query"]
+            return {
+                "success": True,
+                "query": self.query,
+                "message": "Spotify search opened; no track selected and results not read.",
+            }
+        if action == "play":
+            self.state = "playing"
+        elif action == "pause":
+            self.state = "paused"
+        return {
+            "success": True,
+            "player_state": self.state,
+            "track": "Fixture track",
+            "artist": "Fixture artist",
+        }

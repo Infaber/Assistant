@@ -1,5 +1,3 @@
-import json
-import shutil
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -122,55 +120,20 @@ async def test_timeout_consumes_snapshot_without_replay():
     assert "mac_snapshot" not in ctx.session.userdata
 
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        "inspect",
-        "click",
-        "type",
-        "focus_changed",
-        "target_changed",
-        "secure",
-        "shortcut",
-        "scroll",
-    ],
-)
-def test_actual_jxa_against_fake_accessibility_api(case):
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node is needed for the fake JavaScript scripting API")
-    fixture = r"""
-const assert=require('node:assert/strict');
-let effects=[];
-let focus=false;
-const field={role:()=> 'AXTextField',subrole:()=> CASE==='secure'?'AXSecureTextField':'',
-    name:()=> 'Search',description:()=> 'Search',enabled:()=> true,
-    position:()=> [10,20],size:()=> [100,30],value:()=> 'PRIVATE SECRET',uiElements:()=>[]};
-Object.defineProperty(field,'focused',{get:()=>()=>focus,set:v=>{focus=v;}});
-const win={name:()=> 'Music',role:()=> 'AXWindow',subrole:()=>'',description:()=> 'Music',
-    enabled:()=>true,position:()=>[0,0],size:()=>[800,600],uiElements:()=>[field],value:()=>''};
-const proc={name:()=> 'Spotify',unixId:()=> CASE==='focus_changed'?2:1,windows:()=>[win],menuBars:()=>[]};
-const se={applicationProcesses:{whose:()=>()=>[proc]},click:n=>{assert.equal(n,field);effects.push('click');},
-    keystroke:(text,options)=>effects.push(['type',text,options]),keyCode:(code,options)=>effects.push(['key',code,options])};
-function Application(name){assert.equal(name,'System Events');return se;}
-const signature=JSON.stringify(['AXTextField',CASE==='secure'?'AXSecureTextField':'','Search','Search',[10,20],[100,30]]);
-let req={action:CASE==='inspect'||CASE==='secure'?'inspect':CASE==='type'?'type':CASE==='shortcut'?'shortcut':CASE==='scroll'?'scroll':'click',
-    pid:1,window:'Music',target:{path:['window',0,0],signature:CASE==='target_changed'?'old':signature},text:'Daft Punk',
-    key:'l',key_code:null,modifiers:['command'],direction:'down',amount:2};
-if(req.action==='shortcut'||req.action==='scroll') delete req.target;
-const out=JSON.parse(run([JSON.stringify(req)]));
-if(CASE==='secure') {assert.ok(!JSON.stringify(out).includes('PRIVATE SECRET'));assert.equal(out.elements[1].secure,true);}
-else if(CASE==='inspect') {assert.equal(out.elements[1].name,'Search');assert.deepEqual(out.elements[1].path,['window',0,0]);}
-else if(CASE==='focus_changed'||CASE==='target_changed') {assert.ok(out.error);assert.equal(effects.length,0);}
-else if(CASE==='type') {assert.equal(focus,true);assert.equal(effects[0][1],'Daft Punk');}
-else if(CASE==='click') assert.deepEqual(effects,['click']);
-else if(CASE==='shortcut') assert.deepEqual(effects[0],['type','l',{using:['command down']}]);
-else if(CASE==='scroll') {assert.equal(effects.length,2);assert.equal(effects[0][1],121);}
-"""
-    result = subprocess.run(
-        [node, "-e", "const CASE=" + json.dumps(case) + ";\n" + mac.MAC_JXA + fixture],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
+def test_native_controls_bypass_apple_event_ui_scan(monkeypatch):
+    native = Mock(return_value={"elements": []})
+    monkeypatch.setattr(mac, "run_native", native)
+    subprocess_call = Mock(side_effect=AssertionError("No osascript UI scans"))
+    monkeypatch.setattr(mac.subprocess, "run", subprocess_call)
+    assert mac._run_mac({"action": "inspect"}) == {"elements": []}
+    native.assert_called_once_with({"action": "inspect"})
+
+
+def test_open_app_keeps_name_out_of_script(monkeypatch):
+    runner = Mock(return_value=SimpleNamespace(returncode=0, stdout='{"success":true}'))
+    monkeypatch.setattr(mac.subprocess, "run", runner)
+    name = 'Spotify"; shell command'
+    assert mac._run_mac({"action": "open", "app_name": name})["success"]
+    argv = runner.call_args.args[0]
+    assert name not in argv[4]
+    assert name in __import__("json").loads(argv[5])["app_name"]

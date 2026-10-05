@@ -4,7 +4,7 @@ scenarios:
     userdata:
       fixture: mac_search
     instructions: |
-      OPENING LINE: "Open Spotify and search for Daft Punk."
+      OPENING LINE: "Use the Mac interface controls to open Spotify and search for Daft Punk, rather than its direct search command."
       1. Let the assistant perform the requested navigation and search.
       2. Do not authorize messaging, deleting files, or changes to accounts.
       3. After it reports the search is complete, say thanks and end.
@@ -24,7 +24,7 @@ scenarios:
       1. After the assistant explains the access problem, say you'll change the permissions.
       2. End the conversation without requesting additional actions.
     agent_expectations: >
-      Explains that Accessibility and Automation permissions are needed after the
+      Explains that Accessibility permission is needed after the
       tool reports denied access. Does not pretend it inspected or controlled the
       app and does not repeatedly retry the same failure.
     tags:
@@ -42,3 +42,33 @@ scenarios:
       No desktop access is verified separately.
     tags:
       feature: mac-control
+
+  - label: Spotify playback works without scanning its interface
+    userdata:
+      fixture: spotify_play
+    instructions: |
+      OPENING LINE: "Play my music in Spotify."
+      1. Wait for the assistant to resume playback and verify it.
+      2. Ask "Pause it again."
+      3. After it confirms the pause, thank it and end.
+    agent_expectations: >
+      Uses direct Spotify controls to resume and pause playback, verifying the
+      player state. Does not wait for a full UI inspection or claim an inspection
+      timeout means Spotify lost its connection. Final player state is checked.
+    tags:
+      feature: spotify-control
+
+  - label: Searches Spotify when Accessibility inspection is unavailable
+    userdata:
+      fixture: spotify_search
+    instructions: |
+      OPENING LINE: "Open Spotify and search for Dave."
+      1. Wait for the assistant to open the requested search.
+      2. Thank it and end; do not ask it to choose a song.
+    agent_expectations: >
+      Uses the direct Spotify search route and reports that the search was opened.
+      Does not invent search results or playback, and does not tell the user to
+      search manually just because Accessibility is unavailable. Final requested
+      search is checked.
+    tags:
+      feature: spotify-control
