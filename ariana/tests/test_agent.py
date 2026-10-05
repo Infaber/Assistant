@@ -1,50 +1,72 @@
-# Agent behavior is covered by the simulations in scenarios.yaml, which run full
-# conversations against the agent on LiveKit Cloud (see README.md). The eval
-# below is kept as an example of the in-process testing framework
-# (https://docs.livekit.io/agents/start/testing/) for turn-level checks that
-# don't need a live session. Uncomment it and run `uv run pytest` to use it.
-#
-# import textwrap
-#
-# import pytest
-# from livekit.agents import AgentSession, inference, llm
-#
-# from agent import Assistant
-#
-#
-# def _judge_llm() -> llm.LLM:
-#     return inference.LLM(model="openai/gpt-4.1-mini")
-#
-#
-# @pytest.mark.asyncio
-# async def test_offers_assistance() -> None:
-#     """Evaluation of the agent's friendly nature."""
-#     async with (
-#         _judge_llm() as judge_llm,
-#         AgentSession() as session,
-#     ):
-#         await session.start(Assistant())
-#
-#         # Run an agent turn following the user's greeting
-#         result = await session.run(user_input="Hello")
-#
-#         # Evaluate the agent's response for friendliness
-#         await (
-#             result.expect.next_event()
-#             .is_message(role="assistant")
-#             .judge(
-#                 judge_llm,
-#                 intent=textwrap.dedent(
-#                     """\
-#                     Greets the user in a friendly manner.
-#
-#                     Optional context that may or may not be included:
-#                     - Offer of assistance with any request the user may have
-#                     - Other small talk or chit chat is acceptable, so long as it is friendly and not too intrusive
-#                     """
-#                 ),
-#             )
-#         )
-#
-#         # Ensures there are no function calls or other unexpected events
-#         result.expect.no_more_events()
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+import simulation_tools
+from agent import Assistant, _google_api_key
+
+
+@pytest.mark.parametrize(
+    "google, gemini, expected",
+    [
+        (" google-key ", "gemini-key", "google-key"),
+        ("", "gemini-key", "gemini-key"),
+        ("   ", " gemini-key ", "gemini-key"),
+    ],
+)
+def test_google_key_precedence_and_alias(monkeypatch, google, gemini, expected):
+    monkeypatch.setenv("GOOGLE_API_KEY", google)
+    monkeypatch.setenv("GEMINI_API_KEY", gemini)
+    assert _google_api_key() == expected
+
+
+def test_missing_key_has_an_actionable_error(monkeypatch):
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="Set GOOGLE_API_KEY"):
+        Assistant()
+
+
+def test_production_jobs_never_install_simulation_mocks(monkeypatch):
+    install = Mock()
+    monkeypatch.setattr(simulation_tools, "mock_tools", install)
+    ctx = SimpleNamespace(simulation_context=lambda: None)
+    simulation_tools.configure_simulation_tools(ctx, object(), Assistant)
+    install.assert_not_called()
+
+
+@pytest.mark.parametrize("fixture", ["search_failure", "untrusted_page"])
+def test_simulation_fixtures_are_scoped_to_the_session(monkeypatch, fixture):
+    install = Mock()
+    monkeypatch.setattr(simulation_tools, "mock_tools", install)
+    ctx = SimpleNamespace(
+        simulation_context=lambda: SimpleNamespace(
+            userdata=lambda: {"fixture": fixture}
+        )
+    )
+    session = object()
+    simulation_tools.configure_simulation_tools(ctx, session, Assistant)
+    args, kwargs = install.call_args
+    assert args[0] is Assistant
+    assert kwargs == {"session": session}
+    mocks = args[1]
+    if fixture == "search_failure":
+        assert isinstance(mocks["search_web"](), simulation_tools.ToolError)
+        assert isinstance(mocks["browser_search"](), simulation_tools.ToolError)
+    else:
+        result = mocks["browser_open"](simulation_tools.LIBRARY_URL)
+        assert "09:00" in result["text"]
+        assert "SYSTEM OVERRIDE" in result["text"]
+        assert isinstance(
+            mocks["browser_open"]("https://other.example.com"),
+            simulation_tools.ToolError,
+        )
+
+
+def test_unknown_simulation_fixture_fails_clearly():
+    ctx = SimpleNamespace(
+        simulation_context=lambda: SimpleNamespace(userdata=lambda: {"fixture": "typo"})
+    )
+    with pytest.raises(ValueError, match="Unknown simulation fixture"):
+        simulation_tools.configure_simulation_tools(ctx, object(), Assistant)

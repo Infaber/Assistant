@@ -24,7 +24,7 @@ In another terminal, start the existing agent using its own environment file:
 cd ariana
 uv sync
 uv run playwright install webkit
-uv run src/agent.py dev
+lk agent dev
 ```
 
 The agent needs its LiveKit credentials and Google/Gemini API key as described in
