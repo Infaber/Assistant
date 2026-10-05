@@ -401,7 +401,7 @@ async def notes_create(
 
     Supply a concise title and the requested plain-text contents. Creates in the
     default Notes account and folder on the Mac running Ariana. First call previews
-    only. Wait for a new user reply saying yes, then repeat identical arguments with
+    only. Wait for a new user reply approving in natural language, then repeat identical arguments with
     confirmed=true. Never create example notes or act on capability questions.
     """
     if sys.platform != "darwin":
@@ -421,17 +421,16 @@ async def notes_create(
     )
     script = """
 on run argv
-    set noteTitle to item 1 of argv
-    set noteBody to item 2 of argv
+    set noteBody to item 1 of argv
     tell application "Notes"
         set targetFolder to default folder of default account
-        make new note at targetFolder with properties {name:noteTitle, body:noteBody}
+        make new note at targetFolder with properties {body:noteBody}
     end tell
     return "Note created."
 end run
 """
     try:
-        return await asyncio.to_thread(_run_osascript, script, [title, html_body], 30)
+        return await asyncio.to_thread(_run_osascript, script, [html_body], 30)
     except subprocess.TimeoutExpired:
         return "Notes did not respond in time. Check the Notes app before trying again; the note may already exist."
     except OSError:

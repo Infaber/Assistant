@@ -43,9 +43,11 @@ async def test_notes_escape_html_and_pass_user_text_as_arguments(monkeypatch):
     assert await tools.notes_create._func(None, title, body) == "Note created."
     script, arguments, timeout = run.call_args.args
     assert title not in script and body not in script
-    assert arguments[0] == title
+    assert "name:" not in script
+    assert "properties {body:noteBody}" in script
+    assert len(arguments) == 1
     assert (
-        arguments[1]
+        arguments[0]
         == "<h1>Shopping &lt;list&gt; &quot;today&quot;</h1><div>Milk &amp; bread<br>&lt;script&gt;bad&lt;/script&gt; 📝</div>"
     )
     assert timeout == 30

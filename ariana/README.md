@@ -161,13 +161,13 @@ runs alongside the existing simulations in CI.
 Ask Ariana, for example, "Create a note called Grocery list with milk and bread."
 The `notes_create` tool creates a new note in the default account's default folder
 on the Mac running the agent. Titles, line breaks, and plain-text contents are
-preserved. Ariana can also search note titles (`notes_list`), read a selected note
+preserved. The title comes from the first heading in the body; it is not set a second time through Notes' name property. Ariana can also search note titles (`notes_list`), read a selected note
 (`notes_read`), and append or replace its contents (`notes_edit`). It uses stable IDs
 so duplicate titles can be disambiguated. There is no delete tool.
 
 Creating or editing always previews the proposed change and waits for a **new user
-reply saying yes**. The code blocks writes in the preview turn and consumes each
-confirmation once. Corrections, refusal, or changed arguments require a fresh preview.
+reply approving the change** (natural phrasing is fine; no required keywords). The code blocks writes in the preview turn and consumes each
+confirmation once. Ariana interprets approval in context. Refusals and unrelated replies do not approve a write; changed arguments require a fresh preview.
 Existing conversations must be restarted to pick up this behavior.
 
 Appending preserves existing HTML. Replacing uses plain text and removes previous

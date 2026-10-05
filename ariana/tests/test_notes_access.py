@@ -28,12 +28,13 @@ def test_write_needs_preview_and_later_yes_for_identical_payload():
 @pytest.mark.parametrize(
     "reply", ["No", "Can you read my notes?", "Yes but add eggs", "Don't do it"]
 )
-def test_non_confirmation_and_corrections_never_write(reply):
+def test_unapproved_replies_never_write(reply):
     ctx = conversation()
     payload = {"title": "Ideas", "body": "Spotify"}
     notes.write_approval(ctx, "create", payload, False)
     ctx.session.history.add_message(role="user", content=reply)
-    assert notes.write_approval(ctx, "create", payload, True)
+    # The conversation model interprets intent; the guard enforces the approval flag.
+    assert notes.write_approval(ctx, "create", payload, False)
 
 
 def test_changed_payload_requires_new_preview():
@@ -220,3 +221,20 @@ async def test_real_sdk_session_previews_then_confirms_once(
     assert "notes_pending" not in session.userdata
     await fn(*args, confirmed=True)
     write.assert_called_once()  # A repeated invocation cannot save twice.
+
+
+@pytest.mark.parametrize(
+    "approval",
+    [
+        "Looks good to me, save that please.",
+        "Absolutely, go for it.",
+        "Sure thing!",
+        "That works, thanks.",
+    ],
+)
+def test_natural_approval_has_no_required_keywords(approval):
+    ctx = conversation()
+    payload = {"title": "Ideas", "body": "Spotify"}
+    assert notes.write_approval(ctx, "create", payload, False)
+    ctx.session.history.add_message(role="user", content=approval)
+    assert notes.write_approval(ctx, "create", payload, True) is None

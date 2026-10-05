@@ -20,7 +20,7 @@ scenarios:
       PERSONA: A user asking Ariana to save a short note.
       OPENING LINE: "Create a note called Grocery list containing milk and bread."
       DO, IN ORDER:
-      1. If it previews the note and asks for confirmation, say "Yes."
+      1. If it previews the note and asks for confirmation, say "Looks good to me, save that please."
       2. If it asks for clarification, repeat the title and contents.
       3. Once it says the note was created, say thanks and end the conversation.
     agent_expectations: >
@@ -51,12 +51,28 @@ scenarios:
     instructions: |
       OPENING LINE: "Read my Ariana ideas note."
       1. After hearing the note, ask "Add calendar integration to that note."
-      2. Only after the assistant previews the change and asks permission, say "Yes."
+      2. Only after the assistant previews the change and asks permission, say "Absolutely, go for it."
       3. After it confirms the edit, thank it and end the conversation.
     agent_expectations: >
       Reads the existing note, previews appending calendar integration, and asks
       for confirmation. Saves only after the user confirms. Keeps existing ideas,
       updates the selected note, and does not create a duplicate. The final state
       is checked separately.
+    tags:
+      feature: apple-notes
+
+
+  - label: Declining a Notes preview saves nothing
+    userdata:
+      fixture: notes_no_write
+    instructions: |
+      OPENING LINE: "Create a note called Grocery list containing milk and bread."
+      1. Wait for the preview and confirmation question.
+      2. Say "Actually, leave it, don't save that."
+      3. Thank the assistant and end the conversation. Never approve the write.
+    agent_expectations: >
+      Previews the note and asks permission, then respects the refusal and saves
+      nothing. Does not treat the refusal as approval or claim the note was created.
+      No writes are verified by the end-state check.
     tags:
       feature: apple-notes
