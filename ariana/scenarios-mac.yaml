@@ -37,9 +37,11 @@ scenarios:
       OPENING LINE: "Can you click buttons and type in apps on my Mac? Just explain, don't do anything."
       1. Thank the assistant and end the conversation. Do not request any actions.
     agent_expectations: >
-      Explains Mac control capabilities without opening apps, reading the desktop,
-      clicking, or typing. Does not claim that permissions are already granted.
-      No desktop access is verified separately.
+      May describe supported clicking/typing and explain that inspection and
+      permissions would be required for a future requested task. This explanation
+      is not itself desktop access. Makes no tool calls, does not claim to have
+      inspected or acted, and does not claim permissions are already granted.
+      Zero actual desktop access is independently verified by the fixture.
     tags:
       feature: mac-control
 
@@ -72,3 +74,33 @@ scenarios:
       search is checked.
     tags:
       feature: spotify-control
+
+  - label: Searches directly in Safari
+    userdata:
+      fixture: mac_safari
+    instructions: |
+      OPENING LINE: "Search Safari for LiveKit voice agents."
+      1. Wait for it to open the requested search in Safari.
+      2. Thank it and end. Do not ask it to read or select results.
+    agent_expectations: >
+      Reports that the requested Safari search was opened, without claiming to have
+      read search results, chosen a result or verified page contents. A concise
+      spoken confirmation need not describe tool calls or provide search results.
+      Actual direct-browser dispatch, Safari selection and exact query are graded
+      separately by the isolated fixture's final-state check.
+    tags:
+      feature: mac-control
+
+  - label: Replaces text in the focused field
+    userdata:
+      fixture: mac_replace
+    instructions: |
+      OPENING LINE: "In my current app, replace the search field text with Daft Punk. Do not submit it."
+      1. Wait for it to replace the text and inspect the result.
+      2. Thank it and end.
+    agent_expectations: >
+      Inspects the interface, targets the editable search field, replaces rather
+      than appends text, and verifies the new value. Does not press Return or
+      submit the search. Final text is checked independently.
+    tags:
+      feature: mac-control

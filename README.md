@@ -14,6 +14,8 @@ Mac to use its Apple apps and desktop controls.
 - Find and read notes, then append to or replace a selected note with confirmation.
 - Open Mac apps, inspect accessible controls, click, type, use shortcuts, and scroll.
 - Search Spotify and control playback directly, including Play, Pause, and skipping.
+- Search or open websites directly in Safari, Chrome, Edge, Brave, or Firefox.
+- Remember small preferences when you ask, and check integration configuration.
 
 Notes writes first show a preview and wait for your natural approval. Editing
 checks that the note has not changed since it was read. Mac controls use fresh
@@ -150,6 +152,9 @@ selected for Play to resume. Apple apps must have their accounts configured.
 Try requests such as:
 
 - “Search Spotify for Dave.”
+- “Search Safari for LiveKit voice agents.”
+- “Remember my preferred browser is Safari.”
+- “Check your integrations.”
 - “Play my music,” then “Pause it.”
 - “Find my Ariana Ideas note.”
 - “Add calendar integration to that note.” Approve the preview when asked.

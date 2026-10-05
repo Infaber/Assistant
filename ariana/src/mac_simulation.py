@@ -13,6 +13,16 @@ class DesktopFixture:
         self.events.append(dict(request))
         if request["action"] == "apps":
             return {"apps": [{"name": self.app, "pid": 77, "frontmost": True}]}
+        if request["action"] in {"browser_search", "browser_open"}:
+            self.app = request["app_name"]
+            self.query = request.get("query", "")
+            self.url = request["url"]
+            return {
+                "success": True,
+                "browser": self.app,
+                "url": self.url,
+                "message": "Browser navigation dispatched; results not read.",
+            }
         if self.denied:
             return {
                 "error": "Accessibility access is denied. Enable it in macOS Privacy & Security."
@@ -52,6 +62,8 @@ class DesktopFixture:
                         "enabled": True,
                         "path": ["window", 0, 1],
                         "signature": "search-field",
+                        "focused": True,
+                        "editable": True,
                     },
                     {
                         "id": "e2",
@@ -73,7 +85,11 @@ class DesktopFixture:
         if action == "type":
             if request["target"]["id"] != "e1":
                 return {"error": "Not a text field"}
-            self.query += request["text"]
+            self.query = (
+                request["text"]
+                if request.get("replace")
+                else self.query + request["text"]
+            )
         elif action == "shortcut" and request["key"] in {"return", "enter"}:
             self.searched = True
         return {"success": True, "message": "Action sent; inspect to verify."}

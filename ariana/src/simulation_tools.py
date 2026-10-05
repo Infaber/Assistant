@@ -39,6 +39,8 @@ def configure_simulation_tools(
         (
             "mac_control",
             "spotify_control",
+            "preferences_manage",
+            "assistant_status",
             "notes_create",
             "notes_edit",
             "calendar_create_event",
@@ -48,12 +50,38 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture in {"spotify_play", "spotify_search"}:
+    if fixture == "preferences":
+        preferences = {}
+        events = []
+
+        def memory(request):
+            events.append(request)
+            if request["action"] == "remember":
+                preferences[request["key"]] = request["value"]
+            elif request["action"] == "forget":
+                preferences.pop(request["key"], None)
+            return {"success": True, "preferences": dict(preferences)}
+
+        session.userdata = {
+            "_preferences_simulator": memory,
+            "preferences": preferences,
+            "preference_events": events,
+        }
+        mocks.pop("preferences_manage")
+    elif fixture in {"spotify_play", "spotify_search"}:
         spotify = SpotifyFixture()
         session.userdata = {"_spotify_simulator": spotify.run, "spotify": spotify}
         mocks.pop("spotify_control")
-    elif fixture in {"mac_search", "mac_permission", "mac_no_action"}:
+    elif fixture in {
+        "mac_search",
+        "mac_permission",
+        "mac_no_action",
+        "mac_safari",
+        "mac_replace",
+    }:
         desktop = DesktopFixture(denied=fixture == "mac_permission")
+        if fixture == "mac_replace":
+            desktop.query = "Old search"
         session.userdata = {"_mac_simulator": desktop.run, "desktop": desktop}
         mocks.pop(
             "mac_control"
@@ -156,6 +184,17 @@ def _library_page(url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture == "preferences":
+        state = ctx.job_context.primary_session.userdata
+        events = state["preference_events"]
+        if (
+            state["preferences"]
+            or [e["action"] for e in events if e["action"] != "recall"]
+            != ["remember", "forget"]
+            or not any(e["action"] == "recall" for e in events)
+        ):
+            ctx.fail("Expected one saved browser preference, recall, then removal.")
+        return
     if fixture in {"spotify_play", "spotify_search"}:
         spotify = ctx.job_context.primary_session.userdata["spotify"]
         actions = [event["action"] for event in spotify.events]
@@ -166,10 +205,22 @@ async def check_simulation_state(ctx: SimulationContext) -> None:
         if fixture == "spotify_search" and spotify.query.casefold() != "dave":
             ctx.fail("Expected the Dave search to be opened directly in Spotify.")
         return
-    if fixture in {"mac_search", "mac_permission", "mac_no_action"}:
+    if fixture in {
+        "mac_search",
+        "mac_permission",
+        "mac_no_action",
+        "mac_safari",
+        "mac_replace",
+    }:
         session = ctx.job_context.primary_session
         desktop = session.userdata["desktop"]
-        if fixture == "mac_search":
+        if fixture == "mac_safari":
+            if desktop.app != "Safari" or desktop.query != "LiveKit voice agents":
+                ctx.fail("Expected a direct Safari search for LiveKit voice agents.")
+        elif fixture == "mac_replace":
+            if desktop.query != "Daft Punk" or desktop.searched:
+                ctx.fail("Expected replaced text, without submitting the search.")
+        elif fixture == "mac_search":
             if (
                 desktop.app.casefold() != "spotify"
                 or desktop.query.casefold() != "daft punk"
