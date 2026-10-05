@@ -1,0 +1,14 @@
+name: Restored integration capabilities
+scenarios:
+  - label: Recognizes restored personal assistant tools
+    instructions: |
+      PERSONA: A user checking that their integrations survived an update.
+      OPENING LINE: "Without using any tools, can you tell me whether you support Home Assistant, Apple Calendar, Reminders, Mail, weather, and web browsing?"
+      DO, IN ORDER:
+      1. Listen to the reply. Do not request any device changes or access to personal data.
+      2. Thank the assistant and end the conversation.
+    agent_expectations: >
+      Recognizes all six supported capabilities. Does not claim that device connections
+      or macOS permissions have been verified. Does not use tools or change anything.
+    tags:
+      feature: restored-integrations

@@ -143,3 +143,15 @@ docker run --rm --env-file ariana/.env.local ariana
 The image installs WebKit and its native libraries and runs as a non-root user.
 For managed deployment, see the
 [LiveKit deployment guide](https://docs.livekit.io/deploy/agents/).
+
+## Personal integrations
+
+Ariana includes the restored Home Assistant, YR weather, Apple Calendar, Reminders,
+and Mail tools. Set `HOME_ASSISTANT_URL` and `HOME_ASSISTANT_TOKEN` in
+`ariana/.env.local` for smart-home requests. Apple tools run on the Mac hosting
+the agent and require macOS Automation permission for Calendar, Reminders, and
+Mail. They are unavailable on Linux hosts. Event creation, reminder creation,
+and email sending retain their confirmation checks.
+
+The integration capability regression is in `scenarios-integrations.yaml` and
+runs alongside the existing simulations in CI.

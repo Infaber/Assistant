@@ -70,3 +70,26 @@ def test_unknown_simulation_fixture_fails_clearly():
     )
     with pytest.raises(ValueError, match="Unknown simulation fixture"):
         simulation_tools.configure_simulation_tools(ctx, object(), Assistant)
+
+
+@pytest.mark.asyncio
+async def test_restored_tools_remain_registered(monkeypatch):
+    from livekit.agents.llm import is_function_tool
+    from livekit.agents.llm.tool_context import get_function_info
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    agent = Assistant()
+    names = {
+        get_function_info(tool).name for tool in agent.tools if is_function_tool(tool)
+    }
+    assert {
+        "search_web",
+        "home_assistant_request",
+        "weather_forecast",
+        "calendar_today",
+        "calendar_create_event",
+        "reminders_today",
+        "reminders_create",
+        "mail_unread",
+        "mail_send",
+    } <= names
