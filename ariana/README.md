@@ -155,3 +155,15 @@ and email sending retain their confirmation checks.
 
 The integration capability regression is in `scenarios-integrations.yaml` and
 runs alongside the existing simulations in CI.
+
+## Apple Notes
+
+Ask Ariana, for example, "Create a note called Grocery list with milk and bread."
+The `notes_create` tool creates a new note in the default account's default folder
+on the Mac running the agent. Titles, line breaks, and plain-text contents are
+preserved. It does not read, edit, or delete existing notes.
+
+On first use, macOS may ask the app launching Ariana to control Notes. Allow it in
+System Settings > Privacy & Security > Automation. Notes must have a configured
+account; the integration does not work on a Linux-hosted agent. Restart a running
+agent after updating, then start a new conversation.

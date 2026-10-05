@@ -15,13 +15,14 @@ from livekit.agents import (
 from livekit.plugins import ai_coustics, google
 
 from browser_tools import BrowserToolset
-from simulation_tools import configure_simulation_tools
+from simulation_tools import check_simulation_state, configure_simulation_tools
 from tools import (
     calendar_create_event,
     calendar_today,
     home_assistant_request,
     mail_send,
     mail_unread,
+    notes_create,
     reminders_create,
     reminders_today,
     search_web,
@@ -64,6 +65,7 @@ class Assistant(Agent):
                 reminders_create,
                 mail_unread,
                 mail_send,
+                notes_create,
                 BrowserToolset(),
             ],
             # To use a realtime model instead of a voice pipeline, replace the LLM
@@ -122,6 +124,7 @@ class Assistant(Agent):
             - Use the weather tool for current weather or forecast requests. It uses YR and may ask which location you mean.
             - Use calendar_today for schedule questions. Before creating a calendar event, summarize the title and times and get explicit confirmation.
             - Use reminders_today for reminder questions. Before creating a reminder, summarize its title and due time and get explicit confirmation.
+            - Use notes_create when the user explicitly asks you to create or save an Apple note. Use their requested title and contents; ask only for missing details. Report success only after the tool succeeds. You cannot read existing notes.
             - Use mail_unread for unread email summaries. Before sending email, summarize the recipient, subject, and message and get explicit confirmation.
             - If the user asks you to search for something and show it on screen, use the browser search tool so the visible browser opens the results page.
             - Use the browser tools when the user asks you to open, read, or inspect a web page.
@@ -167,7 +170,7 @@ class Assistant(Agent):
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="ariana")
+@server.rtc_session(agent_name="ariana", on_simulation_end=check_simulation_state)
 async def my_agent(ctx: JobContext):
     # Logging setup
     # Add any other context you want in all log entries here

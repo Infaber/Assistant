@@ -3,6 +3,7 @@ import logging
 import os
 import subprocess
 import sys
+from html import escape
 from urllib.parse import urlparse
 
 import httpx
@@ -390,12 +391,52 @@ end run
         return "I couldn't send the email through Apple Mail. Check macOS Automation permissions for Ariana."
 
 
-def _run_osascript(script: str, arguments: list[str]) -> str:
+@function_tool
+async def notes_create(context: RunContext, title: str, body: str) -> str:
+    """Create a new Apple Notes note when the user explicitly asks to save a note.
+
+    Supply a concise title and the requested plain-text contents. Creates in the
+    default Notes account and folder on the Mac running Ariana. Does not read,
+    edit, or delete existing notes.
+    """
+    if sys.platform != "darwin":
+        return "Apple Notes tools are available only when Ariana runs locally on a Mac."
+    title, body = title.strip(), body.strip()
+    if not title or not body:
+        return "I need a title and contents before creating the note."
+
+    # Notes expects HTML. Escape user text and pass it as arguments, never code.
+    html_body = (
+        f"<h1>{escape(title)}</h1><div>{escape(body).replace(chr(10), '<br>')}</div>"
+    )
+    script = """
+on run argv
+    set noteTitle to item 1 of argv
+    set noteBody to item 2 of argv
+    tell application "Notes"
+        set targetFolder to default folder of default account
+        make new note at targetFolder with properties {name:noteTitle, body:noteBody}
+    end tell
+    return "Note created."
+end run
+"""
+    try:
+        return await asyncio.to_thread(_run_osascript, script, [title, html_body], 30)
+    except subprocess.TimeoutExpired:
+        return "Notes did not respond in time. Check the Notes app before trying again; the note may already exist."
+    except OSError:
+        return "I couldn't create the note. Check that Notes has an account and allow access in macOS System Settings > Privacy & Security > Automation."
+
+
+def _run_osascript(
+    script: str, arguments: list[str], timeout: float | None = None
+) -> str:
     result = subprocess.run(
         ["osascript", "-l", "AppleScript", "-e", script, *arguments],
         capture_output=True,
         text=True,
         check=False,
+        timeout=timeout,
     )
     if result.returncode != 0:
         raise OSError(result.stderr.strip() or "AppleScript failed")

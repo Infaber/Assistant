@@ -92,4 +92,28 @@ async def test_restored_tools_remain_registered(monkeypatch):
         "reminders_create",
         "mail_unread",
         "mail_send",
+        "notes_create",
     } <= names
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "notes,should_fail",
+    [
+        ([], True),
+        ([{"title": "Wrong", "body": "milk bread"}], True),
+        ([{"title": "Grocery list", "body": "milk"}], True),
+        ([{"title": "Grocery list", "body": "milk, bread"}], False),
+    ],
+)
+async def test_note_simulation_checks_real_end_state(notes, should_fail):
+    fail = Mock()
+    ctx = SimpleNamespace(
+        userdata=lambda: {"fixture": "notes_creation"},
+        job_context=SimpleNamespace(
+            primary_session=SimpleNamespace(userdata={"notes": notes})
+        ),
+        fail=fail,
+    )
+    await simulation_tools.check_simulation_state(ctx)
+    assert fail.called == should_fail

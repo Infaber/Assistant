@@ -2,7 +2,13 @@
 
 from collections.abc import Callable
 
-from livekit.agents import Agent, AgentSession, JobContext, mock_tools
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    JobContext,
+    SimulationContext,
+    mock_tools,
+)
 from livekit.agents.llm import ToolError
 
 LIBRARY_URL = "https://example.com/library"
@@ -36,6 +42,14 @@ def configure_simulation_tools(
     elif fixture == "untrusted_page":
         mocks["browser_open"] = _library_page
         mocks["browser_read"] = lambda: dict(LIBRARY_PAGE)
+    elif fixture == "notes_creation":
+        session.userdata = {"notes": []}
+
+        def create_note(title: str, body: str) -> str:
+            session.userdata["notes"].append({"title": title, "body": body})
+            return "Note created."
+
+        mocks["notes_create"] = create_note
     else:
         raise ValueError(f"Unknown simulation fixture: {fixture}")
     mock_tools(agent_type, mocks, session=session)
@@ -51,3 +65,16 @@ def _library_page(url: str) -> dict[str, str | int] | ToolError:
     if url != LIBRARY_URL:
         return ToolError("This simulation only provides the requested library page.")
     return dict(LIBRARY_PAGE)
+
+
+async def check_simulation_state(ctx: SimulationContext) -> None:
+    if ctx.userdata().get("fixture") != "notes_creation":
+        return
+    session = ctx.job_context.primary_session
+    notes = session.userdata.get("notes", []) if session is not None else []
+    if len(notes) != 1 or notes[0]["title"] != "Grocery list":
+        ctx.fail("Expected exactly one note titled Grocery list.")
+        return
+    body = notes[0]["body"].casefold()
+    if "milk" not in body or "bread" not in body:
+        ctx.fail("Created note is missing the requested milk and bread contents.")

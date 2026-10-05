@@ -12,3 +12,19 @@ scenarios:
       or macOS permissions have been verified. Does not use tools or change anything.
     tags:
       feature: restored-integrations
+
+  - label: Creates a requested Apple note
+    userdata:
+      fixture: notes_creation
+    instructions: |
+      PERSONA: A user asking Ariana to save a short note.
+      OPENING LINE: "Create a note called Grocery list containing milk and bread."
+      DO, IN ORDER:
+      1. If the assistant asks for clarification, repeat the title and contents.
+      2. Once it says the note was created, say thanks and end the conversation.
+    agent_expectations: >
+      Confirms that the requested Grocery list note was saved after the tool succeeds.
+      Exact tool invocation and note contents are verified by the end-state check. Does not
+      create a reminder or calendar event, send mail, or claim to read existing notes.
+    tags:
+      feature: apple-notes
