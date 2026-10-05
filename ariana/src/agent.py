@@ -15,7 +15,13 @@ from livekit.agents import (
 from livekit.plugins import ai_coustics, google
 
 from browser_tools import BrowserToolset
-from tools import home_assistant_request, search_web, weather_forecast
+from tools import (
+    calendar_create_event,
+    calendar_today,
+    home_assistant_request,
+    search_web,
+    weather_forecast,
+)
 
 logger = logging.getLogger("agent")
 
@@ -39,6 +45,8 @@ class Assistant(Agent):
                 search_web,
                 home_assistant_request,
                 weather_forecast,
+                calendar_today,
+                calendar_create_event,
                 BrowserToolset(),
             ],
             # To use a realtime model instead of a voice pipeline, replace the LLM
@@ -95,6 +103,7 @@ class Assistant(Agent):
             - After a web search, summarize the useful results in plain spoken language and say when the search returned no useful results.
             - Use the Home Assistant tool for natural-language smart-home requests, then report Home Assistant's response without inventing device state.
             - Use the weather tool for current weather or forecast requests. It uses YR and may ask which location you mean.
+            - Use calendar_today for schedule questions. Before creating a calendar event, summarize the title and times and get explicit confirmation.
             - If the user asks you to search for something and show it on screen, use the browser search tool so the visible browser opens the results page.
             - Use the browser tools when the user asks you to open, read, or inspect a web page.
             - Browser access is isolated to this session and is read-only. Do not enter credentials, submit forms, make purchases, send messages, upload files, download files, or delete data.

@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import subprocess
+import sys
 from urllib.parse import urlparse
 
 import httpx
@@ -134,3 +136,93 @@ async def weather_forecast(context: RunContext, location: str) -> str:
         f"In {display_name}, it's {temperature:.0f} degrees Celsius with {conditions}. "
         f"Wind is around {wind_speed:.0f} meters per second."
     )
+
+
+@function_tool
+async def calendar_today(context: RunContext) -> str:
+    """List today's events from the local macOS Calendar app."""
+    if sys.platform != "darwin":
+        return (
+            "Apple Calendar tools are available only when Ariana runs locally on a Mac."
+        )
+
+    script = """
+on run
+    set dayStart to (current date)
+    set time of dayStart to 0
+    set dayEnd to dayStart + (1 * days)
+    set results to {}
+    tell application "Calendar"
+        repeat with calendarItem in calendars
+            repeat with eventItem in (every event of calendarItem whose start date < dayEnd and end date > dayStart)
+                set end of results to (summary of eventItem) & " at " & (start date of eventItem as text)
+            end repeat
+        end repeat
+    end tell
+    if results is {} then return "No events scheduled for today."
+    set AppleScript's text item delimiters to linefeed
+    return results as text
+end run
+"""
+    try:
+        output = await asyncio.to_thread(_run_osascript, script, [])
+    except OSError:
+        return "I couldn't access Apple Calendar. Check macOS Automation permissions for Ariana."
+    return output or "No events scheduled for today."
+
+
+@function_tool
+async def calendar_create_event(
+    context: RunContext,
+    title: str,
+    start_time: str,
+    end_time: str,
+    confirmed: bool = False,
+) -> str:
+    """Create a Calendar event only after the user explicitly confirms it."""
+    if sys.platform != "darwin":
+        return (
+            "Apple Calendar tools are available only when Ariana runs locally on a Mac."
+        )
+    if not confirmed:
+        return (
+            f"I can add '{title}' from {start_time} to {end_time}. "
+            "Please confirm before I create it."
+        )
+    if not title.strip() or not start_time.strip() or not end_time.strip():
+        return "I need a title, start time, and end time before creating the event."
+
+    script = """
+on run argv
+    set eventTitle to item 1 of argv
+    set eventStart to item 2 of argv
+    set eventEnd to item 3 of argv
+    tell application "Calendar"
+        set targetCalendar to first calendar
+        tell targetCalendar
+            make new event with properties {summary:eventTitle, start date:date eventStart, end date:date eventEnd}
+        end tell
+    end tell
+    return "Calendar event created."
+end run
+"""
+    try:
+        return await asyncio.to_thread(
+            _run_osascript,
+            script,
+            [title.strip(), start_time.strip(), end_time.strip()],
+        )
+    except OSError:
+        return "I couldn't access Apple Calendar. Check macOS Automation permissions for Ariana."
+
+
+def _run_osascript(script: str, arguments: list[str]) -> str:
+    result = subprocess.run(
+        ["osascript", "-l", "AppleScript", "-e", script, *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise OSError(result.stderr.strip() or "AppleScript failed")
+    return result.stdout.strip()
