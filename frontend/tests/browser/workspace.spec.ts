@@ -15,7 +15,7 @@ test('shows the workspace, drafts suggested prompts, and fits a phone screen', a
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'A space to think together.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Hello. I’m Ariana.' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
   await page.getByRole('button', { name: 'Think it through' }).click();
   await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toHaveValue('Can you help me think through an idea?');

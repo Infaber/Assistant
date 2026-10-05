@@ -53,3 +53,5 @@ jobs:
         run: lk agent simulate text --scenarios scenarios-integrations.yaml
       - name: Check Mac control behavior with a simulated desktop
         run: lk agent simulate text --scenarios scenarios-mac.yaml
+      - name: Check personal memory
+        run: lk agent simulate text --scenarios scenarios-memory.yaml
