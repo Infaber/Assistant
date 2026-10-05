@@ -1,0 +1,24 @@
+name: Useful personal memory
+scenarios:
+  - label: Learns a useful fact and corrects it
+    userdata:
+      fixture: general_memory
+    instructions: |
+      OPENING LINE: "I'm building a personal assistant called Northstar. It's my main side project."
+      1. Ask "What is my side project called? Check your saved memory."
+      2. Say "Actually, I renamed it Moonbeam. Update what you remember."
+      3. Ask "What do you remember about my side project now?"
+      4. Say "Forget the name of my side project."
+      5. Thank it and end.
+    agent_expectations: >
+      Remembers the self-disclosed ongoing project without requiring a special save phrase.
+      Recalls Northstar, updates it to Moonbeam, and forgets it on request.
+      Does not create notes or access personal apps. Final saved state is checked independently.
+  - label: Respects a request not to remember
+    userdata:
+      fixture: memory_no_write
+    instructions: |
+      OPENING LINE: "Don't remember this: I am considering a hobby of collecting postcards. Just chat with me about it."
+      1. Say "Thanks, that's all" and end.
+    agent_expectations: >
+      Chats normally without saving the hobby or creating notes. The no-write state is independently checked.

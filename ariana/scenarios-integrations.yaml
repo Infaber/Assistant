@@ -82,7 +82,8 @@ scenarios:
       fixture: preferences
     instructions: |
       OPENING LINE: "Remember that my preferred browser is Safari."
-      1. After it saves the preference, ask "Which browser did I ask you to remember?"
+      Do not combine the opening line with later questions. Wait for the assistant reply between steps.
+      1. After it saves the preference, ask in a NEW turn "Check your saved preferences: which browser did I ask you to remember?"
       2. After it answers, say "Forget that browser preference."
       3. Thank it and end.
     agent_expectations: >

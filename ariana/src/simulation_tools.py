@@ -40,6 +40,7 @@ def configure_simulation_tools(
             "mac_control",
             "spotify_control",
             "preferences_manage",
+            "memory_manage",
             "assistant_status",
             "notes_create",
             "notes_edit",
@@ -50,7 +51,29 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture == "preferences":
+    if fixture in {"general_memory", "memory_no_write"}:
+        memories = {}
+        events = []
+
+        def memory(request):
+            events.append(request)
+            if request["action"] == "remember":
+                memories[request["topic"]] = request["fact"]
+            elif request["action"] == "forget":
+                memories.pop(request["topic"], None)
+            return {
+                "success": True,
+                "paused": False,
+                "memories": [{"topic": k, "fact": v} for k, v in memories.items()],
+            }
+
+        session.userdata = {
+            "_memory_simulator": memory,
+            "memories": memories,
+            "memory_events": events,
+        }
+        mocks.pop("memory_manage")
+    elif fixture == "preferences":
         preferences = {}
         events = []
 
@@ -184,6 +207,22 @@ def _library_page(url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture in {"general_memory", "memory_no_write"}:
+        state = ctx.job_context.primary_session.userdata
+        writes = [e for e in state["memory_events"] if e["action"] != "recall"]
+        if fixture == "memory_no_write" and writes:
+            ctx.fail("A don't-remember remark was saved.")
+        if fixture == "general_memory" and (
+            state["memories"]
+            or [e["action"] for e in writes] != ["remember", "remember", "forget"]
+            or "northstar" not in writes[0]["fact"].casefold()
+            or "moonbeam" not in writes[1]["fact"].casefold()
+            or writes[0]["topic"] != writes[1]["topic"]
+        ):
+            ctx.fail(
+                "Expected project memory, correction under the same topic, then deletion."
+            )
+        return
     if fixture == "preferences":
         state = ctx.job_context.primary_session.userdata
         events = state["preference_events"]

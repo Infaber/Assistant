@@ -15,7 +15,8 @@ Mac to use its Apple apps and desktop controls.
 - Open Mac apps, inspect accessible controls, click, type, use shortcuts, and scroll.
 - Search Spotify and control playback directly, including Play, Pause, and skipping.
 - Search or open websites directly in Safari, Chrome, Edge, Brave, or Firefox.
-- Remember small preferences when you ask, and check integration configuration.
+- Remember useful interests, routines and ongoing projects naturally across conversations; correct, forget or pause memory on request.
+- Check integration configuration and save explicit browser/response preferences.
 
 Notes writes first show a preview and wait for your natural approval. Editing
 checks that the note has not changed since it was read. Mac controls use fresh
@@ -236,3 +237,11 @@ needed for microphone behavior and permissions on your own Mac.
 
 See the [agent guide](ariana/README.md) and [frontend guide](frontend/README.md)
 for detailed configuration, deployment, tests, and integration limitations.
+
+### Personal memory
+
+Ariana remembers useful, non-sensitive facts you tell her about yourself without a special save phrase. Try “I’m building a personal assistant called Ariana”, then ask about your project in a new conversation. Correct her naturally, ask “What do you remember about me?”, “Forget my side project”, or “Pause remembering things”. Resume with “You can remember things again”. “Don’t remember this” keeps a remark out of memory.
+
+Memory stays on the machine running the Python agent, in `~/Library/Application Support/Ariana/memory.sqlite3` on macOS. It stores up to 100 short facts, with the 20 most recently updated supplied at startup; she can search the remaining facts. Fixed preferences stay in the existing preferences file. This is not a recording or complete conversation archive. Sensitive details, credentials and information read from apps/websites should not be saved. Moving the agent to another machine does not automatically move its memory.
+
+The frontend now uses a light glass design, an animated voice orb, responsive layouts and reduced-motion support. Start it with `cd frontend` then `npm run dev`, and open the localhost address printed in the terminal. Start the Python agent separately for conversations.

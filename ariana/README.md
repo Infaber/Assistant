@@ -280,3 +280,11 @@ replacement, focused Unicode typing, shortcuts, native/fallback clicks, scroll
 dispatch and window switching. It closes the test app afterward. It needs
 Accessibility permission and Apple Command Line Tools; avoid switching apps while
 it runs. It does not open or edit your personal documents.
+
+## General personal memory
+
+Beyond the five fixed preferences, `memory_manage` stores useful self-disclosed interests, routines and ongoing projects automatically. It supports recall, correction by stable topic, explicit forgetting, and pause/resume of saving. Storage is a local SQLite database alongside the preferences file, with atomic transactions, a 100-fact limit and private file permissions. The recent 20 facts are included as untrusted personal context at session startup. Other facts can be searched through the tool. Set `ARIANA_MEMORY_PATH` to use an alternative database, including isolated testing.
+
+Do not save secrets, sensitive details, whole transcripts, third-party private information or facts from app/web content. These constraints are part of the model policy; the storage also rejects common credential labels. Saved facts never authorize actions. Forgetting removes the saved fact, but does not erase an existing conversation transcript or provider logs.
+
+Run `lk agent simulate text --scenarios scenarios-memory.yaml` for the isolated memory conversation checks.

@@ -9,12 +9,12 @@ import {
 import { ConnectionState, RoomEvent, TokenSource } from 'livekit-client';
 import { ArrowUp, AudioLines, Check, ChevronRight, Compass, Copy, Headphones,
   Keyboard, LoaderCircle, MessageSquare, Mic, MicOff, Monitor, PhoneOff,
-  Settings2, ShieldCheck, Sparkles, X } from 'lucide-react';
+  Settings2, ShieldCheck, Sparkles, Brain, X } from 'lucide-react';
 
 const prompts = [
-  { icon: Compass, label: 'Explore something new', text: 'Help me learn something interesting today.' },
+  { icon: Compass, label: 'Plan my day', text: 'Can you help me plan my day?' },
   { icon: Sparkles, label: 'Think it through', text: 'Can you help me think through an idea?' },
-  { icon: MessageSquare, label: 'Find an answer', text: 'I have a question I would like you to look up.' },
+  { icon: Brain, label: 'What you remember', text: 'What do you remember about me?' },
 ];
 
 function friendlyError(error: unknown) {
@@ -154,26 +154,26 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
 
   return <main className="app-shell">
     <aside className="rail" aria-label="Workspace">
-      <a href="/" className="brand-mark" aria-label="Ariana home">a<span>·</span></a>
+      <a href="/" className="brand-mark" aria-label="Ariana home"><Sparkles size={25} /></a>
       <div className="rail-center"><span className="rail-active" aria-label="Conversation"><AudioLines size={22} /></span><span className="rail-line" /></div>
       <button className="icon-button" aria-label="Connection settings" onClick={() => dialog.current?.showModal()}><Settings2 size={20} /></button>
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <div className="brand"><span>Ariana</span><span className="brand-separator" /> <span className="workspace-label">Your personal assistant</span></div>
+        <div className="brand"><span>Ariana</span><span className="brand-separator" /> <span className="workspace-label">A little more possible.</span></div>
         <div className={`connection-pill ${connected ? 'online' : ''}`}><span />{connected ? 'Connected' : connecting ? 'Connecting' : 'Offline'}</div>
       </header>
 
       <div className="main-grid">
         <section className="voice-panel" aria-labelledby="voice-heading">
-          <div className="eyebrow"><span className="small-line" /> A LITTLE CLARITY, OUT LOUD</div>
-          <h1 id="voice-heading">A space to<br />think <em>together.</em></h1>
-          <p className="intro">Ask a question. Untangle an idea.<br />Or just start talking.</p>
+          <div className="eyebrow"><span className="small-line" /> YOUR EVERYDAY, REIMAGINED</div>
+          <h1 id="voice-heading">Hello. I’m <em>Ariana.</em></h1>
+          <p className="intro">Less to do. More room to think.<br />Your day, with a little help.</p>
 
-          <div className={`visualizer-scene ${connected ? 'active' : ''} ${agent.state === 'speaking' ? 'speaking' : ''}`} aria-hidden="true">
+          <div className={`visualizer-scene ${connected ? 'active' : ''} ${agent.state === 'speaking' ? 'speaking' : ''} ${agent.state === 'thinking' ? 'thinking' : ''}`} aria-hidden="true">
             <div className="orbit orbit-outer" /><div className="orbit orbit-middle" />
-            <div className="voice-orb"><div className="orb-highlight" /><div className="orb-core">
-              {connected && agent.microphoneTrack ? <BarVisualizer state={agent.state} trackRef={agent.microphoneTrack} barCount={7} /> : <AudioLines size={58} strokeWidth={1.3} />}
+            <div className="voice-orb"><div className="orb-ribbon ribbon-one" /><div className="orb-ribbon ribbon-two" /><div className="orb-ribbon ribbon-three" /><div className="orb-highlight" /><div className="orb-core">
+              {connected && agent.microphoneTrack ? <BarVisualizer state={agent.state} trackRef={agent.microphoneTrack} barCount={7} /> : <Sparkles size={42} strokeWidth={1.1} />}
             </div></div><span className="orbit-point" />
           </div>
 
@@ -202,7 +202,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
         <section className="conversation-panel" aria-label="Conversation">
           <header className="conversation-header"><div><h2>Conversation</h2><span>LIVE TRANSCRIPT</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
           <div ref={transcript} className="transcript" role="log" aria-live="polite" aria-relevant="additions text">
-            {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><MessageSquare size={23} strokeWidth={1.4} /><span /></div><h3>Good conversations<br />start somewhere.</h3><p>Your words and Ariana’s replies<br />will appear here as you talk.</p></div>
+            {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><MessageSquare size={23} strokeWidth={1.4} /><span /></div><h3>A fresh start.</h3><p>Ask anything, or let’s figure it out together.<br />Your conversation lives here.</p></div>
             : visibleMessages.map((message) => {
               const isAgent = message.type === 'agentTranscript' || (message.from && !message.from.isLocal);
               return <article className={`message ${isAgent ? 'agent-message' : 'user-message'}`} key={message.id}><div className="message-label"><span>{isAgent ? 'ARIANA' : 'YOU'}</span><time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><p>{message.message}</p></article>;
@@ -216,8 +216,8 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
         </section>
       </div>
 
-      <section className="suggestions" aria-label="Conversation ideas"><p>A PLACE TO START</p><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => { setDraft(text); composer.current?.focus(); }}><Icon size={18} /><span>{label}</span><ChevronRight size={16} /></button>)}</div></section>
-      <footer className="footer"><span><AudioLines size={14} /> Made for a more natural conversation.</span><span>Powered by LiveKit</span></footer>
+      <section className="suggestions" aria-label="Conversation ideas"><p>MAKE SOME SPACE</p><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => { setDraft(text); composer.current?.focus(); }}><Icon size={18} /><span>{label}</span><ChevronRight size={16} /></button>)}</div></section>
+      <footer className="footer"><span><AudioLines size={14} /> Ariana · Your personal assistant</span><span>Voice. Ideas. Everyday things.</span></footer>
     </div>
 
     <dialog ref={dialog} className="settings-dialog" onClick={(event) => { if (event.target === dialog.current) dialog.current?.close(); }}>
