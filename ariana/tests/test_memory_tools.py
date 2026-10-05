@@ -96,3 +96,18 @@ def test_corrupt_database_preserved_and_startup_survives(tmp_path, monkeypatch):
     assert path.read_bytes() == b"broken original database"
     with pytest.raises(sqlite3.Error):
         MemoryStore(path).run({"action": "recall"})
+
+
+def test_startup_loads_bounded_context_from_disk(tmp_path, monkeypatch):
+    path = tmp_path / "m.db"
+    monkeypatch.setenv("ARIANA_MEMORY_PATH", str(path))
+    monkeypatch.setattr("memory_tools.read_preferences", lambda: {"display_name": "QA"})
+    store = MemoryStore(path)
+    for i in range(25):
+        store.run({"action": "remember", "topic": f"topic {i}", "fact": f"Fact {i}"})
+    import json
+
+    data = json.loads(memory_context().split("\n")[-1])
+    assert data["total_memories"] == 25
+    assert len(data["memories"]) == 20
+    assert data["preferences"] == {"display_name": "QA"}
