@@ -93,6 +93,9 @@ async def test_restored_tools_remain_registered(monkeypatch):
         "mail_unread",
         "mail_send",
         "notes_create",
+        "notes_list",
+        "notes_read",
+        "notes_edit",
     } <= names
 
 
@@ -127,6 +130,7 @@ async def test_note_fixture_receives_sdk_arguments(monkeypatch):
     import tools
 
     install = Mock()
+    monkeypatch.setattr(simulation_tools, "write_approval", lambda *args: None)
     monkeypatch.setattr(simulation_tools, "mock_tools", install)
     ctx = SimpleNamespace(
         simulation_context=lambda: SimpleNamespace(

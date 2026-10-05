@@ -20,11 +20,43 @@ scenarios:
       PERSONA: A user asking Ariana to save a short note.
       OPENING LINE: "Create a note called Grocery list containing milk and bread."
       DO, IN ORDER:
-      1. If the assistant asks for clarification, repeat the title and contents.
-      2. Once it says the note was created, say thanks and end the conversation.
+      1. If it previews the note and asks for confirmation, say "Yes."
+      2. If it asks for clarification, repeat the title and contents.
+      3. Once it says the note was created, say thanks and end the conversation.
     agent_expectations: >
       Confirms that the requested Grocery list note was saved after the tool succeeds.
       Exact tool invocation and note contents are verified by the end-state check. Does not
       create a reminder or calendar event, send mail, or claim to read existing notes.
+    tags:
+      feature: apple-notes
+
+  - label: Reading capability does not create example notes
+    userdata:
+      fixture: notes_no_write
+    instructions: |
+      OPENING LINE: "Can you read my notes?"
+      1. Ask whether editing is supported too.
+      2. Say "I'm thinking about groceries, but don't save anything."
+      3. Thank the assistant and end the conversation. Never authorize a write.
+    agent_expectations: >
+      Explains reading and editing capabilities without inventing note contents,
+      creating an example note, or modifying any note. No writes are verified by
+      the end-state check.
+    tags:
+      feature: apple-notes
+
+  - label: Reads and appends to the selected note after confirmation
+    userdata:
+      fixture: notes_edit
+    instructions: |
+      OPENING LINE: "Read my Ariana ideas note."
+      1. After hearing the note, ask "Add calendar integration to that note."
+      2. Only after the assistant previews the change and asks permission, say "Yes."
+      3. After it confirms the edit, thank it and end the conversation.
+    agent_expectations: >
+      Reads the existing note, previews appending calendar integration, and asks
+      for confirmation. Saves only after the user confirms. Keeps existing ideas,
+      updates the selected note, and does not create a duplicate. The final state
+      is checked separately.
     tags:
       feature: apple-notes

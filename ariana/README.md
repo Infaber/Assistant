@@ -161,7 +161,20 @@ runs alongside the existing simulations in CI.
 Ask Ariana, for example, "Create a note called Grocery list with milk and bread."
 The `notes_create` tool creates a new note in the default account's default folder
 on the Mac running the agent. Titles, line breaks, and plain-text contents are
-preserved. It does not read, edit, or delete existing notes.
+preserved. Ariana can also search note titles (`notes_list`), read a selected note
+(`notes_read`), and append or replace its contents (`notes_edit`). It uses stable IDs
+so duplicate titles can be disambiguated. There is no delete tool.
+
+Creating or editing always previews the proposed change and waits for a **new user
+reply saying yes**. The code blocks writes in the preview turn and consumes each
+confirmation once. Corrections, refusal, or changed arguments require a fresh preview.
+Existing conversations must be restarted to pick up this behavior.
+
+Appending preserves existing HTML. Replacing uses plain text and removes previous
+formatting; Ariana explains that before asking permission. Replacement is blocked
+for notes with attachments, and editing shared or locked notes is blocked. Edits
+check the revision returned by reading and refuse a note that changed meanwhile.
+Note contents are treated as data, never instructions or permission to use tools.
 
 On first use, macOS may ask the app launching Ariana to control Notes. Allow it in
 System Settings > Privacy & Security > Automation. Notes must have a configured

@@ -6,6 +6,12 @@ import pytest
 import tools
 
 
+@pytest.fixture(autouse=True)
+def allow_creation_for_script_tests(monkeypatch):
+    # Guard behavior is tested separately against real conversation history.
+    monkeypatch.setattr(tools, "write_approval", lambda *args: None)
+
+
 @pytest.mark.asyncio
 async def test_notes_are_mac_only(monkeypatch):
     monkeypatch.setattr(tools.sys, "platform", "linux")

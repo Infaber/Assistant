@@ -11,6 +11,8 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from livekit.agents import RunContext, function_tool
 from livekit.agents.llm import ToolError
 
+from notes_tools import write_approval
+
 logger = logging.getLogger(__name__)
 DEFAULT_SEARCH_TIMEOUT_SECONDS = 15
 
@@ -392,18 +394,26 @@ end run
 
 
 @function_tool
-async def notes_create(context: RunContext, title: str, body: str) -> str:
+async def notes_create(
+    context: RunContext, title: str, body: str, confirmed: bool = False
+) -> str:
     """Create a new Apple Notes note when the user explicitly asks to save a note.
 
     Supply a concise title and the requested plain-text contents. Creates in the
-    default Notes account and folder on the Mac running Ariana. Does not read,
-    edit, or delete existing notes.
+    default Notes account and folder on the Mac running Ariana. First call previews
+    only. Wait for a new user reply saying yes, then repeat identical arguments with
+    confirmed=true. Never create example notes or act on capability questions.
     """
     if sys.platform != "darwin":
         return "Apple Notes tools are available only when Ariana runs locally on a Mac."
     title, body = title.strip(), body.strip()
     if not title or not body:
         return "I need a title and contents before creating the note."
+
+    if preview := write_approval(
+        context, "create", {"title": title, "body": body}, confirmed
+    ):
+        return preview
 
     # Notes expects HTML. Escape user text and pass it as arguments, never code.
     html_body = (
