@@ -226,3 +226,57 @@ It compiles once per source version and caches the executable locally. Apple Com
 Line Tools are required (`xcode-select --install` if missing). The first compilation
 can take roughly 30 seconds; subsequent scans skip compilation. Unlock your Mac
 before inspecting, clicking, typing, or sending shortcuts.
+
+## Desktop navigation and preferences
+
+`mac_control` can open web URLs and searches directly in Safari, Chrome, Edge,
+Brave or Firefox. Use “Search Safari for LiveKit voice agents” or “Open
+https://docs.livekit.io in Safari.” These commands open the browser without
+needing to guess an address-bar control; they do not read results automatically.
+
+Inspection prioritizes the focused field, filters structural noise, includes
+menu commands, and supports a label/text query and output limit. For multiple
+windows, Ariana can list and raise an inspected window. Typing can insert text
+or replace a field's contents without submitting. Keyboard shortcuts respect the
+active macOS keyboard layout and support function keys. Scrolling supports all
+four directions and can target an inspected scroll area.
+
+When a normal Accessibility press is unsupported, ordinary buttons/links can use
+an inspected frame as a fallback. The helper checks that the frame is on a display
+and that the actual element at that position belongs to the inspected control.
+Covered or moved controls are rejected, as are clicks whose center belongs to a different interactive child. Ariana still cannot operate arbitrary
+canvas interfaces or guess locations from screenshots. Mac operations within a
+conversation are serialized, and stale targets require a new inspection.
+
+Ask “Remember my preferred browser is Safari” or “Remember my home city is Oslo.”
+Supported preferences are display name, home city, browser, reply style
+(brief/normal/detailed), and units (metric/imperial). “What do you remember?” reads
+them; “Forget my browser preference” removes that entry. Browser defaults apply to
+browser commands without a named app. Other saved preferences guide the assistant
+when recalled; they do not change macOS settings or the voice model.
+
+Preferences are stored locally in
+`~/Library/Application Support/Ariana/preferences.json` on macOS, or
+`${XDG_CONFIG_HOME:-~/.config}/Ariana/preferences.json` elsewhere. They persist
+across restarts; conversation history and API secrets are not stored there.
+Only explicit requests should save or remove a preference.
+
+Ask “Check your integrations” to see which settings are configured and whether
+Mac Accessibility is available. This check never returns secrets. Present
+settings do not prove a service is reachable or its credentials are valid, and
+Apple Automation permissions still need to be granted individually.
+
+The native helper uses Apple's [Accessibility APIs](https://developer.apple.com/documentation/applicationservices/axuielement)
+and [keyboard translation API](https://developer.apple.com/documentation/coreservices/1390584-uckeytranslate).
+
+To repeat the real Mac smoke check, unlock your Mac and run from `ariana/`:
+
+```sh
+uv run scripts/check_mac_controls.py
+```
+
+This opt-in check temporarily opens two dedicated test windows and exercises
+replacement, focused Unicode typing, shortcuts, native/fallback clicks, scroll
+dispatch and window switching. It closes the test app afterward. It needs
+Accessibility permission and Apple Command Line Tools; avoid switching apps while
+it runs. It does not open or edit your personal documents.

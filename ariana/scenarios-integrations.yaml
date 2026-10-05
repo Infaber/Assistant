@@ -76,3 +76,18 @@ scenarios:
       No writes are verified by the end-state check.
     tags:
       feature: apple-notes
+
+  - label: Remembers and forgets an explicitly requested preference
+    userdata:
+      fixture: preferences
+    instructions: |
+      OPENING LINE: "Remember that my preferred browser is Safari."
+      1. After it saves the preference, ask "Which browser did I ask you to remember?"
+      2. After it answers, say "Forget that browser preference."
+      3. Thank it and end.
+    agent_expectations: >
+      Saves only the requested browser preference, recalls Safari, then removes
+      that preference when asked. Does not change unrelated settings or claim it
+      changed the system default browser. Stored state is independently checked.
+    tags:
+      feature: preferences

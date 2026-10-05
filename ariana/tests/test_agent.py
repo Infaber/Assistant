@@ -98,6 +98,8 @@ async def test_restored_tools_remain_registered(monkeypatch):
         "notes_edit",
         "mac_control",
         "spotify_control",
+        "preferences_manage",
+        "assistant_status",
     } <= names
 
 
