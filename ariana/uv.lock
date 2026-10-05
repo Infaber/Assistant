@@ -18,6 +18,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "ddgs" },
+    { name = "httpx" },
     { name = "langchain-community" },
     { name = "livekit-agents", extra = ["google", "images"] },
     { name = "livekit-plugins-ai-coustics" },
@@ -35,6 +36,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ddgs", specifier = ">=9.16.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "langchain-community", specifier = ">=0.4.2" },
     { name = "livekit-agents", extras = ["google", "images"], specifier = "~=1.8" },
     { name = "livekit-plugins-ai-coustics", specifier = "~=0.3" },

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import os
 import socket
 from urllib.parse import quote_plus, urlparse
@@ -21,6 +22,7 @@ DEFAULT_TIMEOUT_MS = 15_000
 MAX_TEXT_LENGTH = 8_000
 MAX_LINKS = 30
 BLOCKED_HOSTS = {"localhost", "metadata.google.internal"}
+logger = logging.getLogger(__name__)
 
 
 class BrowserToolset(Toolset):
@@ -34,6 +36,7 @@ class BrowserToolset(Toolset):
         self._context: BrowserContext | None = None
         self._page: Page | None = None
         self._page_lock = asyncio.Lock()
+        self._closed = False
         self._timeout_ms = _env_int("ARIANA_BROWSER_TIMEOUT_MS", DEFAULT_TIMEOUT_MS)
         self._max_text_length = _env_int(
             "ARIANA_BROWSER_MAX_TEXT_LENGTH", MAX_TEXT_LENGTH
@@ -42,34 +45,66 @@ class BrowserToolset(Toolset):
 
     async def setup(self) -> BrowserToolset:
         await super().setup()
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.webkit.launch(
-            headless=(
-                self._headless
-                if self._headless is not None
-                else _env_bool("ARIANA_BROWSER_HEADLESS", False)
-            )
-        )
-        self._context = await self._browser.new_context()
-        await self._context.route("**/*", self._route_request)
-        self._page = await self._context.new_page()
-        self._page.set_default_timeout(self._timeout_ms)
+        # Agent startup must not depend on a browser installation or a display.
         return self
+
+    async def _ensure_page(self) -> Page:
+        """Called under _page_lock so concurrent tools launch only one browser."""
+        if self._closed:
+            raise ToolError("The browser session has ended. Start a new session.")
+        if self._page is not None and not self._page.is_closed():
+            return self._page
+        await self._close_resources()
+        try:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.webkit.launch(
+                headless=(
+                    self._headless
+                    if self._headless is not None
+                    else _env_bool("ARIANA_BROWSER_HEADLESS", False)
+                )
+            )
+            self._context = await self._browser.new_context(service_workers="block")
+            await self._context.route("**/*", self._route_request)
+            self._page = await self._context.new_page()
+            self._page.set_default_timeout(self._timeout_ms)
+            return self._page
+        except asyncio.CancelledError:
+            await self._close_resources()
+            raise
+        except Exception:
+            await self._close_resources()
+            logger.warning("Browser startup failed")
+            raise ToolError(
+                "The browser could not start. Check that Playwright WebKit is "
+                "installed and use headless mode on a server."
+            ) from None
 
     async def aclose(self) -> None:
         try:
-            if self._context is not None:
-                await self._context.close()
-            if self._browser is not None:
-                await self._browser.close()
-            if self._playwright is not None:
-                await self._playwright.stop()
+            async with self._page_lock:
+                self._closed = True
+                await self._close_resources()
         finally:
-            self._page = None
-            self._context = None
-            self._browser = None
-            self._playwright = None
             await super().aclose()
+
+    async def _close_resources(self) -> None:
+        resources = [
+            (self._context, "close"),
+            (self._browser, "close"),
+            (self._playwright, "stop"),
+        ]
+        self._page = None
+        self._context = None
+        self._browser = None
+        self._playwright = None
+        for resource, method in resources:
+            if resource is not None:
+                try:
+                    await getattr(resource, method)()
+                except Exception:
+                    # A failed close must not prevent releasing the other resources.
+                    logger.warning("Could not close a browser resource")
 
     @function_tool
     async def browser_search(
@@ -80,10 +115,10 @@ class BrowserToolset(Toolset):
         if not query:
             raise ToolError("Tell me what you want to search for.")
 
-        page = self._require_page()
         search_url = f"https://duckduckgo.com/?q={quote_plus(query)}"
         async with self._page_lock:
             await self._validate_url(search_url)
+            page = await self._ensure_page()
             try:
                 response = await page.goto(
                     search_url,
@@ -96,15 +131,18 @@ class BrowserToolset(Toolset):
                 )
                 summary["query"] = query
                 return summary
-            except Exception as error:
-                raise ToolError(f"Could not open the search page: {error}") from error
+            except ToolError:
+                raise
+            except Exception:
+                logger.warning("Browser search navigation failed")
+                raise ToolError("Could not open the search page. Try again.") from None
 
     @function_tool
     async def browser_open(self, context: RunContext, url: str) -> dict[str, str | int]:
         """Open a public HTTP(S) page and return its title and a short text preview."""
-        page = self._require_page()
         async with self._page_lock:
             await self._validate_url(url)
+            page = await self._ensure_page()
             try:
                 response = await page.goto(
                     url,
@@ -115,21 +153,26 @@ class BrowserToolset(Toolset):
                 return await self._page_summary(
                     page, response.status if response else 0
                 )
-            except Exception as error:
-                raise ToolError(f"Could not open that page: {error}") from error
+            except ToolError:
+                raise
+            except Exception:
+                logger.warning("Browser navigation failed")
+                raise ToolError(
+                    "Could not open that page. Check the URL and try again."
+                ) from None
 
     @function_tool
     async def browser_read(self, context: RunContext) -> dict[str, str | int]:
         """Read the current page title, URL, and bounded visible text."""
-        page = self._require_page()
         async with self._page_lock:
+            page = self._require_page()
             return await self._page_summary(page)
 
     @function_tool
     async def browser_links(self, context: RunContext) -> list[dict[str, str]]:
         """List the first useful links from the current page."""
-        page = self._require_page()
         async with self._page_lock:
+            page = self._require_page()
             links = await page.locator("a").evaluate_all(
                 """
                 (elements, maxLinks) => elements
@@ -151,8 +194,8 @@ class BrowserToolset(Toolset):
     @function_tool
     async def browser_current_page(self, context: RunContext) -> dict[str, str]:
         """Return the current page URL and title without reading page content."""
-        page = self._require_page()
         async with self._page_lock:
+            page = self._require_page()
             return {"url": page.url, "title": await page.title()}
 
     async def _page_summary(
