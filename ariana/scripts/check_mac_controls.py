@@ -95,6 +95,14 @@ async def check():
                 await asyncio.sleep(0.1)
                 view = await inspect(expected)
                 assert any(e["value"] == expected for e in view["elements"])
+            view = await inspect("Ariana Covered Frame")
+            element = next(e for e in view["elements"] if e["role"] == "AXButton")
+            result = await control(
+                ctx, "click", snapshot_id=view["snapshot_id"], element_id=element["id"]
+            )
+            assert result.get("code") == "occluded", result
+            view = await inspect("Frame clicked")
+            assert any(e["value"] == "Frame clicked" for e in view["elements"])
             view = await inspect()
             assert (
                 await control(
@@ -116,7 +124,7 @@ async def check():
             view = await control(ctx, "inspect")
             assert view["window"] == "Ariana Second QA Window"
             print(
-                "PASS: Unicode replacement, focused typing, layout-aware shortcut, native press, verified frame click, directional scroll dispatch, window switching."
+                "PASS: Unicode replacement, focused typing, layout-aware shortcut, native press, verified frame click, interactive-child rejection, directional scroll dispatch, window switching."
             )
         finally:
             app.terminate()

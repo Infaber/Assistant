@@ -244,7 +244,7 @@ four directions and can target an inspected scroll area.
 When a normal Accessibility press is unsupported, ordinary buttons/links can use
 an inspected frame as a fallback. The helper checks that the frame is on a display
 and that the actual element at that position belongs to the inspected control.
-Covered or moved controls are rejected. Ariana still cannot operate arbitrary
+Covered or moved controls are rejected, as are clicks whose center belongs to a different interactive child. Ariana still cannot operate arbitrary
 canvas interfaces or guess locations from screenshots. Mac operations within a
 conversation are serialized, and stale targets require a new inspection.
 

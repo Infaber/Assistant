@@ -184,7 +184,7 @@ if let row = req["target"] as? [String: Any], let path = row["path"] as? [Any], 
 func checkFocus() {
     guard workspace.frontmostApplication?.processIdentifier == pid else { fail("App focus changed. Inspect again.", "stale_target") }
 }
-func pointFor(_ element: AXUIElement) -> CGPoint {
+func pointFor(_ element: AXUIElement, allowInteractiveDescendants: Bool = false) -> CGPoint {
     let position = coordinate(element, "AXPosition", .cgPoint), size = coordinate(element, "AXSize", .cgSize)
     guard position.count == 2, size.count == 2, size[0] > 0, size[1] > 0 else { fail("Control has no usable onscreen frame.") }
     let point = CGPoint(x: position[0] + size[0]/2, y: position[1] + size[1]/2)
@@ -200,6 +200,10 @@ func pointFor(_ element: AXUIElement) -> CGPoint {
     for _ in 0..<32 {
         guard hit != nil else { break }
         if let candidate = hit, CFEqual(candidate, element) { return point }
+        if !allowInteractiveDescendants, let candidate = hit,
+           actions(candidate).contains("AXPress") || ["AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXPopUpButton"].contains(string(candidate, "AXRole")) {
+            fail("Another interactive control occupies this target's center. Inspect and choose the specific child control.", "occluded")
+        }
         hit = hit.flatMap { attr($0, "AXParent") }.flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? unsafeBitCast($0, to: AXUIElement.self) : nil }
     }
     fail("Control is covered by another interface element. Inspect again.", "occluded")
@@ -306,7 +310,7 @@ case "scroll":
     let direction = req["direction"] as? String ?? "down"
     let amount = Int32((["down", "right"].contains(direction) ? -1 : 1) * steps * 6)
     let horizontal = ["left", "right"].contains(direction)
-    let point = pointFor(target ?? window)
+    let point = pointFor(target ?? window, allowInteractiveDescendants: true)
     guard let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left) else { fail("Could not aim the scroll event.") }
     move.post(tap: .cghidEventTap)
     checkFocus()
