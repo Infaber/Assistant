@@ -45,7 +45,7 @@ def configure_simulation_tools(
     elif fixture == "notes_creation":
         session.userdata = {"notes": []}
 
-        def create_note(title: str, body: str) -> str:
+        def create_note(context, title: str, body: str) -> str:
             session.userdata["notes"].append({"title": title, "body": body})
             return "Note created."
 

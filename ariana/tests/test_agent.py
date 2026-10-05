@@ -117,3 +117,31 @@ async def test_note_simulation_checks_real_end_state(notes, should_fail):
     )
     await simulation_tools.check_simulation_state(ctx)
     assert fail.called == should_fail
+
+
+@pytest.mark.asyncio
+async def test_note_fixture_receives_sdk_arguments(monkeypatch):
+    from livekit.agents.llm.utils import prepare_function_arguments
+    from livekit.agents.voice.run_result import _run_mock
+
+    import tools
+
+    install = Mock()
+    monkeypatch.setattr(simulation_tools, "mock_tools", install)
+    ctx = SimpleNamespace(
+        simulation_context=lambda: SimpleNamespace(
+            userdata=lambda: {"fixture": "notes_creation"}
+        )
+    )
+    session = SimpleNamespace(userdata=None)
+    simulation_tools.configure_simulation_tools(ctx, session, Assistant)
+    mock = install.call_args.args[1]["notes_create"]
+    args, kwargs = prepare_function_arguments(
+        fnc=tools.notes_create,
+        json_arguments={"title": "Grocery list", "body": "milk, bread"},
+        call_ctx=Mock(spec=tools.RunContext),
+    )
+    assert await _run_mock(mock, *args, **kwargs) == "Note created."
+    assert session.userdata["notes"] == [
+        {"title": "Grocery list", "body": "milk, bread"}
+    ]
