@@ -216,6 +216,153 @@ end run
         return "I couldn't access Apple Calendar. Check macOS Automation permissions for Ariana."
 
 
+@function_tool
+async def reminders_today(context: RunContext) -> str:
+    """List incomplete reminders due today from the local macOS Reminders app."""
+    if sys.platform != "darwin":
+        return "Apple Reminders tools are available only when Ariana runs locally on a Mac."
+
+    script = """
+on run
+    set dayStart to (current date)
+    set time of dayStart to 0
+    set dayEnd to dayStart + (1 * days)
+    set results to {}
+    tell application "Reminders"
+        repeat with listItem in lists
+            repeat with reminderItem in (reminders of listItem whose completed is false)
+                if due date of reminderItem is not missing value then
+                    if due date of reminderItem < dayEnd and due date of reminderItem >= dayStart then
+                        set end of results to (name of reminderItem) & " at " & (due date of reminderItem as text)
+                    end if
+                end if
+            end repeat
+        end repeat
+    end tell
+    if results is {} then return "No reminders due today."
+    set AppleScript's text item delimiters to linefeed
+    return results as text
+end run
+"""
+    try:
+        output = await asyncio.to_thread(_run_osascript, script, [])
+    except OSError:
+        return "I couldn't access Apple Reminders. Check macOS Automation permissions for Ariana."
+    return output or "No reminders due today."
+
+
+@function_tool
+async def reminders_create(
+    context: RunContext,
+    title: str,
+    due_time: str = "",
+    confirmed: bool = False,
+) -> str:
+    """Create a reminder only after the user explicitly confirms it."""
+    if sys.platform != "darwin":
+        return "Apple Reminders tools are available only when Ariana runs locally on a Mac."
+    if not confirmed:
+        due_text = f" due {due_time}" if due_time.strip() else ""
+        return f"I can create the reminder '{title}'{due_text}. Please confirm before I create it."
+    if not title.strip():
+        return "I need a title before creating the reminder."
+
+    script = """
+on run argv
+    set reminderTitle to item 1 of argv
+    set reminderDue to item 2 of argv
+    tell application "Reminders"
+        set targetList to first list
+        if reminderDue is "" then
+            make new reminder at end of reminders of targetList with properties {name:reminderTitle}
+        else
+            make new reminder at end of reminders of targetList with properties {name:reminderTitle, due date:date reminderDue}
+        end if
+    end tell
+    return "Reminder created."
+end run
+"""
+    try:
+        return await asyncio.to_thread(
+            _run_osascript,
+            script,
+            [title.strip(), due_time.strip()],
+        )
+    except OSError:
+        return "I couldn't access Apple Reminders. Check macOS Automation permissions for Ariana."
+
+
+@function_tool
+async def mail_unread(context: RunContext) -> str:
+    """List a concise summary of recent unread messages from local macOS Mail."""
+    if sys.platform != "darwin":
+        return "Apple Mail tools are available only when Ariana runs locally on a Mac."
+
+    script = """
+on run
+    set results to {}
+    tell application "Mail"
+        repeat with messageItem in (messages of inbox whose read status is false)
+            set end of results to (sender of messageItem) & " | " & (subject of messageItem)
+            if (count of results) is 10 then exit repeat
+        end repeat
+    end tell
+    if results is {} then return "No unread messages."
+    set AppleScript's text item delimiters to linefeed
+    return results as text
+end run
+"""
+    try:
+        output = await asyncio.to_thread(_run_osascript, script, [])
+    except OSError:
+        return "I couldn't access Apple Mail. Check macOS Automation permissions for Ariana."
+    return output or "No unread messages."
+
+
+@function_tool
+async def mail_send(
+    context: RunContext,
+    recipient: str,
+    subject: str,
+    body: str,
+    confirmed: bool = False,
+) -> str:
+    """Send an email only after the user explicitly confirms its contents."""
+    if sys.platform != "darwin":
+        return "Apple Mail tools are available only when Ariana runs locally on a Mac."
+    if not confirmed:
+        return (
+            f"I can send an email to {recipient} with the subject '{subject}'. "
+            "Please confirm before I send it."
+        )
+    if not recipient.strip() or not subject.strip() or not body.strip():
+        return "I need a recipient, subject, and message before sending the email."
+
+    script = """
+on run argv
+    set recipientAddress to item 1 of argv
+    set messageSubject to item 2 of argv
+    set messageBody to item 3 of argv
+    tell application "Mail"
+        set outgoingMessage to make new outgoing message with properties {subject:messageSubject, content:messageBody}
+        tell outgoingMessage
+            make new to recipient at end of to recipients with properties {address:recipientAddress}
+        end tell
+        send outgoingMessage
+    end tell
+    return "Email sent."
+end run
+"""
+    try:
+        return await asyncio.to_thread(
+            _run_osascript,
+            script,
+            [recipient.strip(), subject.strip(), body.strip()],
+        )
+    except OSError:
+        return "I couldn't send the email through Apple Mail. Check macOS Automation permissions for Ariana."
+
+
 def _run_osascript(script: str, arguments: list[str]) -> str:
     result = subprocess.run(
         ["osascript", "-l", "AppleScript", "-e", script, *arguments],
