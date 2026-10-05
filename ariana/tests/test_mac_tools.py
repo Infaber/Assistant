@@ -273,3 +273,24 @@ async def test_parallel_inspections_are_serialized(monkeypatch):
         mac.mac_control._func(ctx, "inspect"), mac.mac_control._func(ctx, "inspect")
     )
     assert peak == 1
+
+
+@pytest.mark.asyncio
+async def test_saved_browser_is_used_only_without_explicit_browser(monkeypatch):
+    ctx = SimpleNamespace(session=SimpleNamespace(userdata={}))
+    monkeypatch.setattr(mac.sys, "platform", "darwin")
+    preferences = Mock(return_value={"default_browser": "Firefox"})
+    backend = Mock(return_value={"success": True})
+    monkeypatch.setattr(mac, "read_preferences", preferences)
+    monkeypatch.setattr(mac, "_run_browser", backend)
+    assert (await mac.mac_control._func(ctx, "browser_search", query="LiveKit"))[
+        "success"
+    ]
+    assert backend.call_args.args[0]["app_name"] == "Firefox"
+    assert (
+        await mac.mac_control._func(
+            ctx, "browser_search", app_name="Safari", query="LiveKit"
+        )
+    )["success"]
+    assert backend.call_args.args[0]["app_name"] == "Safari"
+    assert preferences.call_count == 1
