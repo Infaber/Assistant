@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+test('real local token route accepts the browser origin', async ({ page }) => {
+  await page.goto('/');
+  const status = await page.evaluate(async () => {
+    const response = await fetch('/api/connection', { method: 'POST' });
+    return response.status;
+  });
+  // Credentials may be absent or access-code protected; neither should cause
+  // an origin rejection for a same-origin request through the real Next server.
+  expect([201, 401, 503]).toContain(status);
+});
+
 test('shows the workspace, drafts suggested prompts, and fits a phone screen', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -15,13 +15,22 @@ from livekit.agents import (
 from livekit.plugins import ai_coustics, google
 
 from browser_tools import BrowserToolset
+from simulation_tools import configure_simulation_tools
 from tools import search_web
 
 logger = logging.getLogger("agent")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env.local")
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+
+def _google_api_key() -> str:
+    for name in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        if key := os.environ.get(name, "").strip():
+            return key
+    raise ValueError(
+        "Set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env.local or the environment."
+    )
 
 
 class Assistant(Agent):
@@ -33,7 +42,7 @@ class Assistant(Agent):
                 model="gemini-3.1-flash-live-preview",
                 voice="Achernar",
                 language="en-GB",
-                api_key=GOOGLE_API_KEY,
+                api_key=_google_api_key(),
             ),
             tools=[search_web, BrowserToolset()],
             # To use a realtime model instead of a voice pipeline, replace the LLM
@@ -140,7 +149,7 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
-    # Set up a voice AI pipeline using AssemblyAI, Fish Audio, and the LiveKit turn detector
+    # Gemini handles speech input, speech output, and turn detection.
     session = AgentSession(
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
@@ -162,7 +171,9 @@ async def my_agent(ctx: JobContext):
         ),
     )
 
-    # Start the session, which initializes the voice pipeline and warms up the models
+    configure_simulation_tools(ctx, session, Assistant)
+
+    # Start the session and initialize its tools.
     await session.start(
         agent=Assistant(),
         room=ctx.room,

@@ -3,6 +3,24 @@ import { AccessToken, RoomAgentDispatch, RoomConfiguration, TrackSource } from '
 
 type Environment = Record<string, string | undefined>;
 const headers = { 'Cache-Control': 'no-store' };
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function allowedOrigin(request: Request, env: Environment) {
+  const origin = request.headers.get('origin');
+  const expected = env.APP_ORIGIN || new URL(request.url).origin;
+  if (!origin) return false;
+  if (origin === expected) return true;
+  // Next dev can reconstruct request.url with localhost even when the browser
+  // uses 127.0.0.1. Allow loopback aliases only in development, on the same port.
+  if (env.APP_ORIGIN || env.NODE_ENV !== 'development') return false;
+  try {
+    const actual = new URL(origin);
+    const target = new URL(expected);
+    return actual.origin === origin && loopbackHosts.has(actual.hostname)
+      && loopbackHosts.has(target.hostname) && actual.protocol === target.protocol
+      && actual.port === target.port;
+  } catch { return false; }
+}
 
 function error(message: string, status: number) {
   return Response.json({ error: message }, { status, headers });
@@ -11,12 +29,10 @@ function error(message: string, status: number) {
 // A personal frontend uses a shared access code. A multi-user deployment should
 // replace this gate with its own authenticated user/session check.
 export async function createConnection(request: Request, env: Environment = process.env) {
-  const origin = request.headers.get('origin');
-  const expectedOrigin = env.APP_ORIGIN || new URL(request.url).origin;
-  if (!origin || origin !== expectedOrigin) return error('This request is not allowed.', 403);
+  if (!allowedOrigin(request, env)) return error('This request is not allowed.', 403);
 
   const code = env.ARIANA_ACCESS_CODE?.trim();
-  const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname);
+  const local = loopbackHosts.has(new URL(request.url).hostname);
   if (!code && (env.NODE_ENV === 'production' || !local)) {
     return error('Set ARIANA_ACCESS_CODE on the frontend server before connecting.', 503);
   }

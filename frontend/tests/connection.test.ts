@@ -14,6 +14,29 @@ test('rejects missing or foreign origins', async () => {
   }
 });
 
+test('accepts Next dev loopback aliases on both default and fallback ports', async () => {
+  for (const port of [3000, 3001]) {
+    for (const host of ['127.0.0.1', '[::1]']) {
+      const req = new Request(`http://localhost:${port}/api/connection`, {
+        method: 'POST', headers: { origin: `http://${host}:${port}` },
+      });
+      assert.equal((await createConnection(req, env)).status, 201);
+    }
+  }
+});
+
+test('loopback exception rejects foreign hosts, ports, protocols and malformed origins', async () => {
+  for (const origin of ['http://localhost:3001', 'https://127.0.0.1:3000', 'http://attacker.example:3000', 'http://127.0.0.1:3000/path', 'null']) {
+    assert.equal((await createConnection(request({ origin }), env)).status, 403);
+  }
+});
+
+test('production and explicit APP_ORIGIN keep exact origin matching', async () => {
+  const req = request({ origin: 'http://127.0.0.1:3000' });
+  assert.equal((await createConnection(req, { ...env, NODE_ENV: 'production', ARIANA_ACCESS_CODE: 'secret' })).status, 403);
+  assert.equal((await createConnection(req, { ...env, APP_ORIGIN: 'http://localhost:3000' })).status, 403);
+});
+
 test('production and non-local deployments require an access code', async () => {
   assert.equal((await createConnection(request(), { ...env, NODE_ENV: 'production' })).status, 503);
   const remote = new Request('https://assistant.example/api/connection', { method: 'POST', headers: { origin: 'https://assistant.example' } });
