@@ -187,6 +187,7 @@ async def my_agent(ctx: JobContext):
 
     # Gemini handles speech input, speech output, and turn detection.
     session = AgentSession(
+        userdata={},
         # Speech-to-text (STT) is your agent's ears, turning the user's speech into text that the LLM can understand
         # See all available models at https://docs.livekit.io/agents/models/stt/
         # Keyterms bias the STT toward distinctive words it would otherwise misspell.

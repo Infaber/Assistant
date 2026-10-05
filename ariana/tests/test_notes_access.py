@@ -175,3 +175,48 @@ def test_later_unrelated_yes_cannot_authorize_an_old_preview():
     ctx.session.history.add_message(role="user", content="No")
     ctx.session.history.add_message(role="user", content="Yes")
     assert notes.write_approval(ctx, "create", payload, True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("initialized", [False, True])
+@pytest.mark.parametrize("operation", ["create", "edit"])
+async def test_real_sdk_session_previews_then_confirms_once(
+    monkeypatch, initialized, operation
+):
+    from livekit.agents import AgentSession, RunContext
+
+    import tools
+
+    session = AgentSession(userdata={}) if initialized else AgentSession()
+    if not initialized:
+        with pytest.raises(ValueError, match="userdata is not set"):
+            _ = session.userdata
+    context = RunContext(
+        session=session, speech_handle=Mock(num_steps=1), function_call=Mock()
+    )
+    session.history.add_message(
+        role="user", content="Create Ariana Ideas with Spotify integration"
+    )
+    monkeypatch.setattr(notes.sys, "platform", "darwin")
+    write = Mock(
+        return_value="Note created." if operation == "create" else {"success": True}
+    )
+    if operation == "create":
+        monkeypatch.setattr(tools, "_run_osascript", write)
+        fn = tools.notes_create._func
+        args = (context, "Ariana Ideas", "Spotify integration")
+    else:
+        monkeypatch.setattr(notes, "_run_notes", write)
+        fn = notes.notes_edit._func
+        args = (context, "note-a", "v1", "Ariana Ideas", "Spotify integration")
+    preview = await fn(*args, confirmed=False)
+    assert "Nothing saved" in str(preview)
+    write.assert_not_called()
+    assert "notes_pending" in session.userdata
+    session.history.add_message(role="user", content="Yes")
+    result = await fn(*args, confirmed=True)
+    assert "created" in str(result) or result.get("success")
+    write.assert_called_once()
+    assert "notes_pending" not in session.userdata
+    await fn(*args, confirmed=True)
+    write.assert_called_once()  # A repeated invocation cannot save twice.

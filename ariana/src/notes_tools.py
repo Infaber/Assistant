@@ -18,9 +18,14 @@ def write_approval(
     if context is None:
         return "No active conversation; the note was not changed."
     session = context.session
-    if session.userdata is None:
-        session.userdata = {}
-    state = session.userdata
+    # The SDK getter raises when userdata is unset; it does not return None.
+    try:
+        state = session.userdata
+    except ValueError:
+        state = None
+    if state is None:
+        state = {}
+        session.userdata = state
     users = [
         item for item in session.history.items if getattr(item, "role", None) == "user"
     ]
