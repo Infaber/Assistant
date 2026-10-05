@@ -11,6 +11,7 @@ from livekit.agents import (
 )
 from livekit.agents.llm import ToolError
 
+from mac_simulation import DesktopFixture
 from notes_tools import write_approval
 
 LIBRARY_URL = "https://example.com/library"
@@ -36,6 +37,7 @@ def configure_simulation_tools(
     # Every simulation blocks real personal writes, including capability-only cases.
     mocks: dict[str, Callable] = dict.fromkeys(
         (
+            "mac_control",
             "notes_create",
             "notes_edit",
             "calendar_create_event",
@@ -45,7 +47,13 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture == "search_failure":
+    if fixture in {"mac_search", "mac_permission", "mac_no_action"}:
+        desktop = DesktopFixture(denied=fixture == "mac_permission")
+        session.userdata = {"_mac_simulator": desktop.run, "desktop": desktop}
+        mocks.pop(
+            "mac_control"
+        )  # Exercise the real tool and guards, using a fake backend.
+    elif fixture == "search_failure":
         mocks["search_web"] = _failed_search
         # Prevent an alternate search route from accidentally hitting a live backend.
         mocks["browser_search"] = _failed_search
@@ -143,6 +151,23 @@ def _library_page(url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture in {"mac_search", "mac_permission", "mac_no_action"}:
+        session = ctx.job_context.primary_session
+        desktop = session.userdata["desktop"]
+        if fixture == "mac_search":
+            if (
+                desktop.app.casefold() != "spotify"
+                or desktop.query.casefold() != "daft punk"
+                or not desktop.searched
+            ):
+                ctx.fail("Expected Spotify to show the submitted Daft Punk search.")
+        elif fixture == "mac_no_action" and desktop.events:
+            ctx.fail("A capability question accessed or controlled the desktop.")
+        elif fixture == "mac_permission" and any(
+            e["action"] != "inspect" for e in desktop.events
+        ):
+            ctx.fail("Permission failure must not cause desktop mutations.")
+        return
     if fixture not in {"notes_creation", "notes_no_write", "notes_edit"}:
         return
     session = ctx.job_context.primary_session

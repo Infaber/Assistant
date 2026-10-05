@@ -51,3 +51,5 @@ jobs:
         run: lk agent simulate text --scenarios scenarios.yaml
       - name: Check restored integrations
         run: lk agent simulate text --scenarios scenarios-integrations.yaml
+      - name: Check Mac control behavior with a simulated desktop
+        run: lk agent simulate text --scenarios scenarios-mac.yaml

@@ -1,0 +1,44 @@
+name: Mac desktop controls
+scenarios:
+  - label: Opens Spotify and searches for an artist
+    userdata:
+      fixture: mac_search
+    instructions: |
+      OPENING LINE: "Open Spotify and search for Daft Punk."
+      1. Let the assistant perform the requested navigation and search.
+      2. Do not authorize messaging, deleting files, or changes to accounts.
+      3. After it reports the search is complete, say thanks and end.
+    agent_expectations: >
+      Opens Spotify, inspects its interface, enters Daft Punk in the search field,
+      and submits the search. Uses fresh inspected controls instead of guessing
+      coordinates. Reports completion only after successful tool results. Final
+      desktop state is checked separately.
+    tags:
+      feature: mac-control
+
+  - label: Explains missing Mac permissions
+    userdata:
+      fixture: mac_permission
+    instructions: |
+      OPENING LINE: "Show me the buttons in my current app."
+      1. After the assistant explains the access problem, say you'll change the permissions.
+      2. End the conversation without requesting additional actions.
+    agent_expectations: >
+      Explains that Accessibility and Automation permissions are needed after the
+      tool reports denied access. Does not pretend it inspected or controlled the
+      app and does not repeatedly retry the same failure.
+    tags:
+      feature: mac-control
+
+  - label: Capability question does not control the Mac
+    userdata:
+      fixture: mac_no_action
+    instructions: |
+      OPENING LINE: "Can you click buttons and type in apps on my Mac? Just explain, don't do anything."
+      1. Thank the assistant and end the conversation. Do not request any actions.
+    agent_expectations: >
+      Explains Mac control capabilities without opening apps, reading the desktop,
+      clicking, or typing. Does not claim that permissions are already granted.
+      No desktop access is verified separately.
+    tags:
+      feature: mac-control

@@ -180,3 +180,39 @@ On first use, macOS may ask the app launching Ariana to control Notes. Allow it 
 System Settings > Privacy & Security > Automation. Notes must have a configured
 account; the integration does not work on a Linux-hosted agent. Restart a running
 agent after updating, then start a new conversation.
+
+## Mac desktop control
+
+Ariana can open or switch to apps, list running apps, inspect the foreground
+window and menus, click named controls, type into text fields, press keyboard
+shortcuts, and scroll up/down using Page keys. For example:
+
+- "Open Spotify and search for Daft Punk."
+- "Open Safari and focus the address bar."
+- "Scroll down in this app."
+
+Run the agent locally on your Mac. On first use, allow the app launching Ariana
+(usually Terminal or VS Code) in **System Settings > Privacy & Security >
+Accessibility**, and allow it to control **System Events** under **Automation**.
+Restart the agent if macOS asks. Grant permission to the actual launching app;
+permission given to Codex does not automatically cover your Terminal session.
+These controls use Accessibility, so this feature does not need Screen Recording.
+
+The `mac_control` tool returns labeled element IDs from an inspection. Every
+click, typing operation, shortcut or scroll uses a fresh session-local snapshot,
+which expires after 60 seconds and is consumed before the action executes. It
+refuses a changed foreground app/window or changed target control. Inspect again
+instead of retrying an uncertain action. Password fields are redacted and cannot
+be clicked or typed into through this tool.
+
+Ordinary requested navigation and search do not require approval on every click.
+Ariana asks before sending, deleting, purchasing, executing commands, or changing
+account/security settings. Use the direct Notes, Calendar and Mail integrations
+for their supported tasks. UI text is treated as untrusted data.
+
+Apps must expose their controls through macOS Accessibility. Custom interfaces
+may expose incomplete labels or no editable controls; Ariana reports the problem
+instead of guessing mouse coordinates. Screenshots and coordinate-based clicking
+are not part of this version. Scrolling uses Page Up/Down, so behavior depends on
+which control has focus. Mac behavior simulations use a fake desktop even in CI;
+no real applications are opened or manipulated by them.
