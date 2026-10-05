@@ -1,0 +1,49 @@
+# Runs real inference on merges and on demand, not on every PR update.
+name: Simulations
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: ariana
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+      LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+      LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      ARIANA_BROWSER_HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check required credentials
+        run: |
+          for name in LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET GOOGLE_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository secret: $name"
+              exit 1
+            fi
+          done
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.14"
+      - name: Install locked dependencies
+        run: uv sync --locked
+      - name: Install WebKit and its system dependencies
+        run: uv run playwright install --with-deps webkit
+      - name: Download model files
+        run: uv run --module livekit.agents download-files
+      - name: Install LiveKit CLI
+        run: curl -sSL https://get.livekit.io/cli | bash
+      - name: Run simulations
+        run: lk agent simulate text --scenarios scenarios.yaml
