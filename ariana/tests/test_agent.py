@@ -55,11 +55,11 @@ def test_simulation_fixtures_are_scoped_to_the_session(monkeypatch, fixture):
         assert isinstance(mocks["search_web"](), simulation_tools.ToolError)
         assert isinstance(mocks["browser_search"](), simulation_tools.ToolError)
     else:
-        result = mocks["browser_open"](simulation_tools.LIBRARY_URL)
+        result = mocks["browser_open"](None, simulation_tools.LIBRARY_URL)
         assert "09:00" in result["text"]
         assert "SYSTEM OVERRIDE" in result["text"]
         assert isinstance(
-            mocks["browser_open"]("https://other.example.com"),
+            mocks["browser_open"](None, "https://other.example.com"),
             simulation_tools.ToolError,
         )
 
@@ -153,3 +153,21 @@ async def test_note_fixture_receives_sdk_arguments(monkeypatch):
     assert session.userdata["notes"] == [
         {"title": "Grocery list", "body": "milk, bread"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_browser_fixture_receives_sdk_context_before_url():
+    from livekit.agents import RunContext
+    from livekit.agents.llm.utils import prepare_function_arguments
+    from livekit.agents.voice.run_result import _run_mock
+
+    from browser_tools import BrowserToolset
+
+    tool = next(t for t in BrowserToolset().tools if t.id == "browser_open")
+    args, kwargs = prepare_function_arguments(
+        fnc=tool,
+        json_arguments={"url": simulation_tools.LIBRARY_URL},
+        call_ctx=Mock(spec=RunContext),
+    )
+    result = await _run_mock(simulation_tools._library_page, *args, **kwargs)
+    assert result["verified"] and "09:00" in result["text"]
