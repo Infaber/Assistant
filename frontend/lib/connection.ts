@@ -69,7 +69,7 @@ export async function createConnection(request: Request, env: Environment = proc
     canPublishSources: [TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE],
   });
   token.roomConfig = new RoomConfiguration({
-    agents: [new RoomAgentDispatch({ agentName: 'ariana' })],
+    agents: [new RoomAgentDispatch({ agentName: env.LIVEKIT_AGENT_NAME?.trim() || 'ariana' })],
     emptyTimeout: 60, departureTimeout: 20, maxParticipants: 2,
   });
   return Response.json({ server_url: serverUrl, participant_token: await token.toJwt() }, {

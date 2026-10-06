@@ -2,7 +2,7 @@
 
 A futuristic command-centre frontend for the existing `ariana` LiveKit agent. It includes
 voice and text input, a live transcript, audio visualization, microphone controls,
-optional screen sharing, transcript copying, and connection/error feedback.
+optional screen sharing, file/picture attachments, optional check-ins, transcript copying, and connection/error feedback.
 
 ## Run locally
 
@@ -23,7 +23,6 @@ In another terminal, start the existing agent using its own environment file:
 ```sh
 cd ariana
 uv sync
-uv run playwright install webkit
 lk agent dev
 ```
 
@@ -103,3 +102,27 @@ and [server-issued session tokens](https://docs.livekit.io/frontends/build/authe
 The procedural particle globe reacts to Ariana’s actual audio level; connecting/thinking uses amber, and errors use red. The session panel displays real connection, microphone, screen-sharing and message state. Decorative rings are not performance gauges.
 
 Capability shortcuts and quick-start buttons draft requests without sending them. Use the expand button for focus mode; `⌘K` on Mac or `Ctrl+K` returns to the command input. Animations respect reduced-motion settings, and the canvas stops drawing in background tabs. The UI works without external fonts, images or additional rendering libraries.
+
+## Sharing files and optional check-ins
+
+Paste clipboard pictures/files, drag files onto the composer, or use the paperclip.
+Preview attachments before sending. PNG/JPEG/WebP/GIF, PDF, DOCX and UTF-8 text/code
+are supported, up to three files and 10 MB per file. The agent confirms acceptance;
+retrying an interrupted receipt checks the same submission rather than duplicating
+it. Scanned PDFs need screenshots, and incomplete extraction is labelled.
+
+Check-ins are off by default in a browser. Connect, turn on **Check-ins**, choose an
+interval and quiet hours, and keep the page open. Ariana starts a conversation
+after silence, avoids speaking over you, and waits for a reply before another
+check-in. For background operation with the window closed, install the separate
+[Mac companion](../desktop/README.md). The companion auto-connects in text mode,
+keeps the microphone off and defaults to check-ins on.
+
+For tests against an existing preview on another port:
+
+```sh
+ARIANA_TEST_URL=http://127.0.0.1:3020 npm run test:browser
+```
+
+The server-only `LIVEKIT_AGENT_NAME` option overrides the default `ariana`
+dispatch name; the companion uses `ariana-desktop` to own its worker separately.

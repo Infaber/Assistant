@@ -7,6 +7,9 @@ Mac to use its Apple apps and desktop controls.
 ## What Ariana can do
 
 - Talk through your microphone or the web frontend, with a live transcript.
+- Paste, drop or attach pictures, PDFs, Word documents and text/code files.
+- Run a Mac menu bar companion that starts its own services and keeps Ariana connected when its window is closed.
+- Let Ariana initiate gentle check-ins, with configurable intervals and quiet hours.
 - Search, open, and read pages in your real Safari browser.
 - Control your Home Assistant devices and get YR weather forecasts.
 - Read Apple Calendar, Reminders, Mail, and Notes; create events, reminders, emails,
@@ -33,6 +36,7 @@ Custom app interfaces may not expose usable Accessibility controls.
 | --- | --- |
 | `ariana/` | Python voice agent, integrations, tools, and backend tests |
 | `frontend/` | Next.js voice/text interface and connection-token endpoint |
+| `desktop/` | Native macOS menu bar companion and installer |
 | `.github/workflows/` | Backend checks, frontend checks, and conversation simulations |
 
 Both `ariana/` and `frontend/` are directly inside the repository root. The
@@ -285,3 +289,57 @@ workaround. Leave the setting empty unless you have tested that model.
 
 Frontend Playwright remains a **development test dependency** for WebKit UI
 checks; Ariana never uses it to browse.
+
+## Attachments
+
+Use the paperclip beside the message field, drag files onto the composer, or paste
+pictures/files from the clipboard. Review the preview, optionally type a question,
+and press Send. You can stage files before connecting. Ariana accepts up to three
+files per message, 10 MB each: PNG, JPEG, WebP, GIF, PDF, DOCX and UTF-8 text/code.
+Animated pictures use the first frame. Scanned PDFs without text need screenshots.
+PDF extraction covers up to 40 pages, and each document contributes at most 40,000
+characters; incomplete extraction is explicitly labelled. Session limits are 20
+files and 80,000 characters of attachment context. Start a new conversation for
+more. Unsupported, empty, corrupt and locked files report a readable error.
+
+Uploads stay in session memory rather than being saved as local files or personal
+memory. Their contents are sent to your configured model provider as conversation
+context. Sending waits for an agent receipt; a lost receipt can be retried without
+uploading or submitting the accepted message twice. File contents do not authorize
+Mac controls, messages, or memory writes.
+
+## Background Mac companion
+
+After configuring both environment files, run this from the repository root:
+
+```sh
+bash desktop/install.sh
+open "$HOME/Applications/Ariana.app"
+```
+
+The installer builds the frontend and native Swift app. Ariana then starts its
+own production interface on `127.0.0.1:3030` and its own `ariana-desktop` worker;
+you do not need to keep terminals open. It creates a fresh private access code for
+that local interface on every launch. An existing development preview remains
+separate. Re-run the installer after pulling changes to rebuild the app/interface.
+The installed app points at this checkout, so reinstall after moving the project.
+
+The app connects automatically with its microphone **off**. Check-ins are enabled
+by default in the Mac companion, every 15 minutes of silence, with quiet hours
+22:00–08:00 in your local timezone. The app remembers changes to these settings.
+Change the interval to 5, 15, 30 or 60 minutes, or turn check-ins off. Setting the
+same start/end quiet hour disables the quiet window. Ariana waits until both
+sides are idle and sends only one unanswered check-in; your next message or speech
+allows another later. Check-ins cannot invoke tools or inspect your private apps.
+
+Closing the window hides it while the menu bar sparkle stays running. Use the
+sparkle to show Ariana, pause the conversation, or quit. Quit stops the app's own
+services. In an ordinary browser, check-ins are off by default and require an open
+page and connected session. This works while the Mac is awake and online; sleep,
+quitting and disconnection stop the session. Wake-word detection ("Ariana, wake
+up") is **not implemented yet**, and the app does not listen in the background.
+You can add the installed app to macOS Login Items if you want it to open at login.
+
+The companion needs the same local Apple app permissions as the terminal worker.
+Logs are in `~/Library/Application Support/Ariana/desktop.log`. If startup fails,
+check that port 3030 is available and both environment files are configured.

@@ -1,0 +1,17 @@
+name: Mac companion
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate installer
+        run: bash -n desktop/install.sh
+      - name: Compile the native menu bar companion
+        run: swiftc -parse-as-library desktop/Ariana.swift -o /tmp/Ariana-check -framework Cocoa -framework WebKit
