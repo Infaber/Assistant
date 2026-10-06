@@ -150,3 +150,34 @@ async def test_stream_limits_close_reader_and_return_recoverable_error():
     await b.read_upload(reader, future)
     assert "10 MB" in future.result()["error"]
     reader.close.assert_called_once()
+
+
+async def test_live_check_in_generation_disables_tools_and_waits_for_the_user(
+    monkeypatch,
+):
+    import companion
+
+    b = bridge()
+    b.session.agent_state = "listening"
+    b.session.user_state = "away"
+    b.policy.configure(settings(quiet_start=0, quiet_end=0), 0)
+    b.policy.lease_until = 2000
+    monkeypatch.setattr(companion.time, "monotonic", lambda: 1000)
+    speech = asyncio.get_running_loop().create_future()
+    speech.set_result(None)
+    b.session.generate_reply.return_value = speech
+    sleeps = 0
+
+    async def sleep(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(companion.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await b.check_in_loop()
+    b.session.generate_reply.assert_called_once()
+    assert b.session.generate_reply.call_args.kwargs["tool_choice"] == "none"
+    assert b.session.generate_reply.call_args.kwargs["allow_interruptions"] is True
+    assert b.policy.awaiting_user
