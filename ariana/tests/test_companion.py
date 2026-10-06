@@ -186,3 +186,41 @@ async def test_live_check_in_generation_disables_tools_and_waits_for_the_user(
     assert b.session.generate_reply.call_args.kwargs["tool_choice"] == "none"
     assert b.session.generate_reply.call_args.kwargs["allow_interruptions"] is True
     assert b.policy.awaiting_user
+    event = b.session.current_agent.chat_ctx.items[-1]
+    assert "scheduler event" in event.text_content
+    assert "NOT a user message" in event.text_content
+
+
+@pytest.mark.parametrize("stored_error", [False, True])
+async def test_failed_check_in_delivery_does_not_block_future_check_ins(
+    monkeypatch, stored_error
+):
+    import companion
+
+    b = bridge()
+    b.session.agent_state = "listening"
+    b.session.user_state = "away"
+    b.policy.configure(settings(quiet_start=0, quiet_end=0), 0)
+    b.policy.lease_until = 2000
+    monkeypatch.setattr(companion.time, "monotonic", lambda: 1000)
+    speech = asyncio.get_running_loop().create_future()
+    if stored_error:
+        speech.set_result(None)
+        speech.exception = lambda: RuntimeError("Provider disconnected")
+    else:
+        speech.set_exception(RuntimeError("Provider disconnected"))
+    b.session.generate_reply.return_value = speech
+    sleeps = 0
+
+    async def sleep(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(companion.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await b.check_in_loop()
+    assert not b.policy.awaiting_user
+    assert b.policy.last_activity == 1000
+    b.session.generate_reply.assert_called_once()

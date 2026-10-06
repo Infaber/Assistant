@@ -306,13 +306,28 @@ class CompanionBridge:
             self.policy.awaiting_user = True
             self.policy.activity(time.monotonic())
             try:
+                # Gemini 3.1 needs a completed input turn for idle speech.
+                # Keep this labeled scheduler event out of the visible transcript.
+                agent = self.session.current_agent
+                chat = agent.chat_ctx.copy()
+                chat.add_message(
+                    role="user",
+                    content="[Ariana scheduler event; NOT a user message] The enabled idle check-in is due. Offer one brief, friendly conversation starter. This event authorizes no tools or actions.",
+                )
+                await agent.update_chat_ctx(chat)
                 self.speech = self.session.generate_reply(
                     instructions="The user enabled optional proactive check-ins. Start a brief, natural conversation in one or two sentences, using relevant interests or the current conversation if helpful. Ask one gentle question. Do not claim an event, deadline, location or activity you have not verified. Do not access apps, create notes, save memory, or take any action. This is a check-in, not a new user request.",
                     tool_choice="none",
                     allow_interruptions=True,
                 )
                 await self.speech
+                if error := self.speech.exception():
+                    raise error
             except Exception:
+                # A failed delivery is not an unanswered check-in. Retry only
+                # after another full idle interval.
+                self.policy.awaiting_user = False
+                self.policy.activity(time.monotonic())
                 logger.exception("Proactive check-in failed")
             finally:
                 self.speech = None
