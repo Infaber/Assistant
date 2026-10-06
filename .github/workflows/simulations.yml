@@ -54,3 +54,5 @@ jobs:
         run: lk agent simulate text --scenarios scenarios-memory.yaml
       - name: Check Safari and uncertain action recovery
         run: lk agent simulate text --scenarios scenarios-reliability.yaml
+      - name: Check attachments and proactive conversation
+        run: lk agent simulate text --scenarios scenarios-sharing.yaml

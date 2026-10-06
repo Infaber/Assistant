@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RoomAudioRenderer, SessionProvider, StartAudio,
   useAgent, useLocalParticipant, useSession, useSessionMessages,
@@ -12,6 +12,9 @@ import { ArrowUp, Check, ChevronRight, Compass, Copy, Headphones,
   Settings2, ShieldCheck, Sparkles, Brain, X, Aperture, ArrowUpRight,
   Globe, CalendarDays, Music2, House, Maximize2, Minimize2, Command, Radio, ScanLine } from 'lucide-react';
 
+import { desktopConfig } from '../lib/desktop';
+import SharingComposer, { type SharedMessage } from './sharing-composer';
+import CheckInControls from './check-in-controls';
 import IntelligenceCore from './intelligence-core';
 import { parseActivity, updateActivity, finishActivity, type Activity } from '../lib/activity';
 
@@ -39,7 +42,7 @@ function friendlyError(error: unknown) {
 }
 
 export default function Ariana() {
-  const accessCode = useRef('');
+  const accessCode = useRef(desktopConfig()?.accessCode || '');
   const credentials = useRef({ serverUrl: '', participantToken: '' });
   const [ready] = useState(() => {
     let resolve!: () => void;
@@ -86,6 +89,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   const [draft, setDraft] = useState('');
   const [copied, setCopied] = useState(false);
   const [code, setCode] = useState('');
+  const [sharedMessages, setSharedMessages] = useState<SharedMessage[]>([]);
   const [hiddenMessages, setHiddenMessages] = useState<Set<string>>(new Set());
   const [seconds, setSeconds] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -96,6 +100,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   const connecting = busy || session.connectionState === ConnectionState.Connecting;
   const reconnecting = [ConnectionState.Reconnecting, ConnectionState.SignalReconnecting].includes(session.connectionState);
   const visibleMessages = messages.filter((message) => !hiddenMessages.has(message.id));
+  const conversation = [...visibleMessages.map(message => ({ ...message, files: [] as SharedMessage['files'], isAgent: message.type === 'agentTranscript' || !!(message.from && !message.from.isLocal) })), ...sharedMessages.map(message => ({ ...message, isAgent: false }))].sort((a, b) => a.timestamp - b.timestamp);
   const status = providerError ? 'Connection needs attention' : reconnecting ? 'Reconnecting' : !connected ? (connecting ? 'Connecting' : 'Ready when you are')
     : agent.state === 'failed' ? 'Agent unavailable' : agent.state === 'speaking' ? 'Ariana is speaking'
     : agent.state === 'thinking' ? 'Thinking it through' : !agent.isConnected ? 'Finding Ariana'
@@ -160,20 +165,20 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   useEffect(() => {
     const element = transcript.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [messages]);
+  }, [messages, sharedMessages]);
 
   useEffect(() => () => { abort.current?.abort(); void session.room.disconnect(); }, [session.room]);
 
-  async function start() {
+  async function start(asText = false) {
     if (connecting || connected) return;
-    setBusy(true); setError(''); setProviderError(''); setActivity([]); setSeconds(0);
+    setBusy(true); setError(''); setProviderError(''); setActivity([]); setSharedMessages([]); setSeconds(0);
     setHiddenMessages(new Set(messages.map((message) => message.id)));
     const controller = new AbortController();
     abort.current = controller;
     try {
       await prepare(controller.signal);
       controller.signal.throwIfAborted();
-      await session.start({ signal: controller.signal, tracks: { microphone: { enabled: mode === 'voice' } } });
+      await session.start({ signal: controller.signal, tracks: { microphone: { enabled: !asText && mode === 'voice' } } });
       controller.signal.throwIfAborted();
       // StartAudio offers a user gesture if the browser blocks autoplay.
       await session.room.startAudio().catch(() => {});
@@ -182,6 +187,15 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
       await session.end();
     } finally { setBusy(false); }
   }
+
+  useEffect(() => {
+    if (!desktopConfig()) return;
+    setMode('text');
+    const automaticStart = window.setTimeout(() => { void start(true); }, 400);
+    const pause = () => { abort.current?.abort(); void session.end(); };
+    window.addEventListener('ariana:pause', pause);
+    return () => { window.clearTimeout(automaticStart); window.removeEventListener('ariana:pause', pause); };
+  }, [session.room]);
 
   async function end() {
     abort.current?.abort();
@@ -195,18 +209,10 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
     finally { setMediaBusy(false); }
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!draft.trim() || !agent.isConnected || isSending || providerError) return;
-    const text = draft.trim();
-    setError('');
-    try { await send(text); setDraft(''); } catch { setError('Your message could not be sent. Please try again.'); }
-  }
-
   async function copyTranscript() {
     try {
-      await navigator.clipboard.writeText(visibleMessages.map((message) =>
-        `${message.type === 'agentTranscript' || (message.from && !message.from.isLocal) ? 'Ariana' : 'You'}: ${message.message}`
+      await navigator.clipboard.writeText(conversation.map((message) =>
+        `${message.isAgent ? 'Ariana' : 'You'}: ${message.message}${message.files.length ? '\nAttachments: ' + message.files.map(file => file.name).join(', ') : ''}`
       ).join('\n\n'));
       setCopied(true); setTimeout(() => setCopied(false), 2000);
     } catch { setError('Could not copy the conversation. Try selecting the text instead.'); }
@@ -253,7 +259,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
         </div>
         <div className="voice-status" role="status"><span className={`status-dot ${connected ? 'live' : ''}`} />{status}</div>
           {!connected && !connecting ? <>
-            <button className="start-button" onClick={start}><Mic size={19} />Start conversation</button>
+            <button className="start-button" onClick={() => { void start(); }}><Mic size={19} />Start conversation</button>
             <div className="mode-picker" aria-label="Conversation mode">
               <button aria-pressed={mode === 'voice'} onClick={() => setMode('voice')}><Headphones size={15} />Voice</button>
               <button aria-pressed={mode === 'text'} onClick={() => setMode('text')}><Keyboard size={15} />Text</button>
@@ -270,27 +276,27 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
 
           <p className="mic-note"><ShieldCheck size={14} />{connected ? 'You control what you share.' : mode === 'voice' ? 'Your microphone stays off until you start.' : 'Start with text. Turn on your mic anytime.'}</p>
 
+        <CheckInControls participant={localParticipant} destination={agent.isConnected ? agent.identity : undefined} ready={agent.isConnected && !providerError} />
         <div className="quick-commands"><div className="section-label">QUICK START<span>SELECT TO DRAFT</span></div><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => stagePrompt(text)}><Icon size={15} strokeWidth={1.5} /><span>{label}</span><ChevronRight size={13} /></button>)}</div></div>
       </section>
         <section className="conversation-panel" aria-label="Conversation">
-          <header className="conversation-header"><div><h2>{panel === 'conversation' ? 'Conversation' : 'Activity'}<span className="section-index">02</span></h2><span>{panel === 'conversation' ? 'VOICE + TEXT CHANNEL' : 'LIVE ACTION FEED'}</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
+          <header className="conversation-header"><div><h2>{panel === 'conversation' ? 'Conversation' : 'Activity'}<span className="section-index">02</span></h2><span>{panel === 'conversation' ? 'VOICE + TEXT CHANNEL' : 'LIVE ACTION FEED'}</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!conversation.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
           <div className="channel-switch" role="group" aria-label="Channel view"><button aria-pressed={panel === 'conversation'} onClick={() => setPanel('conversation')}>Conversation</button><button aria-pressed={panel === 'activity'} onClick={() => setPanel('activity')}>Activity{' '}<span>{activity.length}</span></button></div>
           {panel === 'activity' ? <div className="activity-feed" role="log" aria-label="Action activity" aria-live="polite">
             {!activity.length ? <div className="empty-transcript"><div className="empty-icon"><ScanLine size={26} strokeWidth={1} /></div><h3>Waiting for a task.</h3><p>Real actions appear here as Ariana works.<br />Page text and personal data stay out of this feed.</p></div>
             : [...activity].reverse().map(item => <article className={`activity-item activity-${item.status}`} key={item.id}><div className="activity-line"><span className="activity-marker">{item.status === 'running' || item.status === 'recovering' ? <LoaderCircle size={14} className="spin" /> : item.status === 'verified' ? <Check size={14} /> : <ScanLine size={14} />}</span><strong>{item.label}</strong><time>{new Date(item.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><span className="activity-state">{({ running: 'Working', returned: 'Result returned', verified: 'Verified', approval: 'Approval needed', uncertain: 'Needs checking', failed: 'Could not complete', recovering: 'Reconnecting' })[item.status]}</span><p>{item.detail}</p></article>)}
           </div> : <div ref={transcript} className="transcript" role="log" aria-live="polite" aria-relevant="additions text">
-            {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><Radio size={27} strokeWidth={1} /><span /></div><h3>Channel standing by.</h3><p>Open a connection to Ariana.<br />Your exchange will appear here.</p></div>
-            : visibleMessages.map((message) => {
-              const isAgent = message.type === 'agentTranscript' || (message.from && !message.from.isLocal);
-              return <article className={`message ${isAgent ? 'agent-message' : 'user-message'}`} key={message.id}><div className="message-label"><span>{isAgent ? 'ARIANA' : 'YOU'}</span><time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><p>{message.message}</p></article>;
+            {conversation.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><Radio size={27} strokeWidth={1} /><span /></div><h3>Channel standing by.</h3><p>Open a connection to Ariana.<br />Your exchange will appear here.</p></div>
+            : conversation.map((message) => {
+              const isAgent = message.isAgent;
+              return <article className={`message ${isAgent ? 'agent-message' : 'user-message'}`} key={message.id}><div className="message-label"><span>{isAgent ? 'ARIANA' : 'YOU'}</span><time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><p>{message.message}</p>{message.files.length > 0 && <div className="shared-files">{message.files.map((file, index) => <div key={index}>{file.preview && <img src={file.preview} alt={file.name} />}<span>{file.name}</span></div>)}</div>}</article>;
             })}
             {connected && agent.state === 'thinking' && <div className="thinking-indicator"><span /><span /><span /><span className="sr-only">Ariana is thinking</span></div>}
           </div>}
-          {providerError && <div className="error-banner" role="alert"><p>{providerError}</p><button className="reconnect-button" disabled={connecting} onClick={connected ? end : start}>{connected ? 'End session' : 'Reconnect'}</button></div>}
+          {providerError && <div className="error-banner" role="alert"><p>{providerError}</p><button className="reconnect-button" disabled={connecting} onClick={() => { void (connected ? end() : start()); }}>{connected ? 'End session' : 'Reconnect'}</button></div>}
           {error && <div className="error-banner" role="alert"><p>{error}</p><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}
           {connected && agent.state === 'failed' && <div className="error-banner" role="alert"><p>Ariana hasn’t joined yet. Check that your agent is running, then end this session and try again.</p></div>}
-          <form className="composer" onSubmit={submit}><span className="command-caret" aria-hidden="true">›</span><input ref={composer} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={connected ? 'Or type a message…' : 'Enter a message…'} aria-label="Message Ariana" maxLength={4000} /><button aria-label="Send message" disabled={!agent.isConnected || !draft.trim() || isSending || !!providerError}>{isSending ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={20} />}</button></form>
-          <div className="composer-hint"><Keyboard size={13} />{agent.isConnected ? 'Enter to send · voice and text work together' : 'Start a conversation to send a message'}</div>
+          <SharingComposer participant={localParticipant} destination={agent.isConnected ? agent.identity : undefined} ready={agent.isConnected && !isSending && !providerError} draft={draft} setDraft={setDraft} inputRef={composer} onText={async text => { await send(text); }} onShared={message => setSharedMessages(current => [...current, message])} onError={setError} sessionKey={connected} />
         </section>
     </div>
     <footer className="footer"><span><span className="footer-dot" />ARIANA<span className="footer-divider">/</span>PERSONAL WORKSPACE</span><button onClick={() => stagePrompt(draft)}><Command size={12} /><span>⌘ / CTRL + K</span><span className="footer-command-label">Command input</span></button><span>VOICE & TEXT<span className="footer-divider">/</span>LIVEKIT</span></footer>
