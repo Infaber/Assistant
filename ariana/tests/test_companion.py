@@ -224,3 +224,46 @@ async def test_failed_check_in_delivery_does_not_block_future_check_ins(
     assert not b.policy.awaiting_user
     assert b.policy.last_activity == 1000
     b.session.generate_reply.assert_called_once()
+
+
+@pytest.mark.parametrize("busy", [False, True])
+async def test_idle_transport_refresh_preserves_context_without_speech(
+    monkeypatch, busy
+):
+    import companion
+
+    b = bridge()
+    b.last_refresh = 0
+    b.session.agent_state = "thinking" if busy else "listening"
+    b.session.user_state = "away"
+    b.session.current_agent.chat_ctx.add_message(
+        role="user", content="A completed request"
+    )
+    replacement = object()
+    b.refresh_agent = Mock(return_value=replacement)
+    b.session.update_agent = Mock()
+    b.policy.configure(settings(), 0)
+    b.policy.lease_until = 200
+    b.policy.awaiting_user = (
+        True  # Still maintain transport after one unanswered prompt.
+    )
+    monkeypatch.setattr(companion.time, "monotonic", lambda: 121)
+    sleeps = 0
+
+    async def sleep(_):
+        nonlocal sleeps
+        sleeps += 1
+        if sleeps == 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(companion.asyncio, "sleep", sleep)
+    with pytest.raises(asyncio.CancelledError):
+        await b.check_in_loop()
+    b.session.generate_reply.assert_not_called()
+    if busy:
+        b.session.update_agent.assert_not_called()
+    else:
+        b.session.update_agent.assert_called_once_with(replacement)
+        retained = b.refresh_agent.call_args.args[0]
+        assert retained.items[0].text_content == "A completed request"
+    assert b.policy.awaiting_user

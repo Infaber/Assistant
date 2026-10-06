@@ -81,8 +81,10 @@ class CheckInPolicy:
 
 
 class CompanionBridge:
-    def __init__(self, room, session):
+    def __init__(self, room, session, refresh_agent=None):
         self.room, self.session = room, session
+        self.refresh_agent = refresh_agent
+        self.last_refresh = time.monotonic()
         self.policy = CheckInPolicy(last_activity=time.monotonic())
         self.uploads = {}
         self.receipts = {}
@@ -300,7 +302,25 @@ class CompanionBridge:
                 and self.session.user_state != "speaking"
                 and not self.uploads
             )
-            if not self.policy.due(time.monotonic(), hour, idle=idle):
+            now = time.monotonic()
+            # Gemini aborts silent live connections after roughly 150 seconds.
+            # Refresh the idle transport before that, retaining completed context
+            # and session userdata without generating speech or replaying actions.
+            if (
+                self.refresh_agent is not None
+                and idle
+                and self.policy.enabled
+                and now < self.policy.lease_until
+                and now - max(self.last_refresh, self.policy.last_activity) >= 120
+            ):
+                self.last_refresh = now
+                try:
+                    chat = self.session.current_agent.chat_ctx.copy()
+                    self.session.update_agent(self.refresh_agent(chat))
+                except Exception:
+                    logger.exception("Idle voice connection refresh failed")
+                continue
+            if not self.policy.due(now, hour, idle=idle):
                 continue
             # One unanswered check-in maximum. Never run tools or inspect private apps.
             self.policy.awaiting_user = True

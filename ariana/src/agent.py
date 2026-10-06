@@ -288,7 +288,16 @@ async def my_agent(ctx: JobContext):
 
     # Room transport is scoped to this session and never installed in simulations.
     if not ctx.simulation_context():
-        companion = CompanionBridge(ctx.room, session)
+        companion = CompanionBridge(
+            ctx.room,
+            session,
+            refresh_agent=lambda chat: Assistant(
+                saved,
+                session.current_agent.llm.model,
+                chat,
+                browser,
+            ),
+        )
         companion.start()
         ctx.add_shutdown_callback(companion.close)
 
