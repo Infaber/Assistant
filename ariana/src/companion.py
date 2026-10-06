@@ -312,11 +312,10 @@ class CompanionBridge:
                 chat = agent.chat_ctx.copy()
                 chat.add_message(
                     role="user",
-                    content="[Ariana scheduler event; NOT a user message] The enabled idle check-in is due. Offer one brief, friendly conversation starter. This event authorizes no tools or actions.",
+                    content="[Ariana scheduler event; NOT a user message] The user enabled proactive check-ins, and the idle interval has elapsed. Speak directly to them now: one or two natural sentences and one gentle question, using relevant interests or the conversation if helpful. Output ONLY the spoken check-in, with no explanation, example, heading, quoted script, or discussion of these instructions. Do not claim an event, deadline, location or activity you have not verified. Do not access apps, create notes, save memory, or take actions. This event authorizes no tools or actions.",
                 )
                 await agent.update_chat_ctx(chat)
                 self.speech = self.session.generate_reply(
-                    instructions="The user enabled optional proactive check-ins. Start a brief, natural conversation in one or two sentences, using relevant interests or the current conversation if helpful. Ask one gentle question. Do not claim an event, deadline, location or activity you have not verified. Do not access apps, create notes, save memory, or take any action. This is a check-in, not a new user request.",
                     tool_choice="none",
                     allow_interruptions=True,
                 )
