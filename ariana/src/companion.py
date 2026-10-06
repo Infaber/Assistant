@@ -115,9 +115,9 @@ class CompanionBridge:
 
     def on_message(self, event):
         item = event.item
-        self.policy.activity(
-            time.monotonic(), user=getattr(item, "role", None) == "user"
-        )
+        role = getattr(item, "role", None)
+        if role in {"user", "assistant"}:
+            self.policy.activity(time.monotonic(), user=role == "user")
 
     def on_user_state(self, event):
         if event.new_state == "speaking":

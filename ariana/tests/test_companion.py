@@ -267,3 +267,12 @@ async def test_idle_transport_refresh_preserves_context_without_speech(
         retained = b.refresh_agent.call_args.args[0]
         assert retained.items[0].text_content == "A completed request"
     assert b.policy.awaiting_user
+
+
+def test_transport_handoffs_do_not_reset_the_idle_timer():
+    b = bridge()
+    b.policy.last_activity = 123
+    b.policy.awaiting_user = True
+    b.on_message(SimpleNamespace(item=SimpleNamespace(type="agent_handoff")))
+    assert b.policy.last_activity == 123
+    assert b.policy.awaiting_user
