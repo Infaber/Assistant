@@ -15,7 +15,7 @@ test('shows the workspace, drafts suggested prompts, and fits a phone screen', a
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Hello. I’m Ariana.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'At your command.' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send message' })).toBeDisabled();
   await page.getByRole('button', { name: 'Think it through' }).click();
   await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toHaveValue('Can you help me think through an idea?');
@@ -55,4 +55,26 @@ test('cancels an in-flight connection without displaying an error', async ({ pag
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start conversation' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Conversation', exact: true }).getByRole('alert')).toHaveCount(0);
+});
+
+
+test('capability commands draft without sending and focus mode returns to input', async ({ page }) => {
+  let requests = 0;
+  await page.route('**/api/connection', async (route) => { requests++; await route.fulfill({ status: 503, json: { error: 'Connection unavailable for this test.' } }); });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Memory A little more personal' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toHaveValue('What do you remember about me?');
+  await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toBeFocused();
+  await page.getByRole('button', { name: 'Enter focus mode' }).click();
+  await expect(page.getByRole('region', { name: 'Conversation', exact: true })).toBeHidden();
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('region', { name: 'Conversation', exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toBeFocused();
+  expect(requests).toBe(0);
+  await page.getByRole('button', { name: 'Enter focus mode' }).click();
+  await page.getByRole('button', { name: 'Text', exact: true }).click();
+  await page.getByRole('button', { name: 'Start conversation' }).click();
+  await expect(page.getByRole('region', { name: 'Conversation', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Conversation', exact: true }).getByRole('alert')).toContainText('Connection unavailable for this test.');
+  await expect(page.getByRole('button', { name: 'Start conversation' })).toBeEnabled();
 });

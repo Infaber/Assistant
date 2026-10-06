@@ -2,14 +2,25 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
-  BarVisualizer, RoomAudioRenderer, SessionProvider, StartAudio,
+  RoomAudioRenderer, SessionProvider, StartAudio,
   useAgent, useLocalParticipant, useSession, useSessionMessages,
   type UseSessionReturn,
 } from '@livekit/components-react';
 import { ConnectionState, RoomEvent, TokenSource } from 'livekit-client';
-import { ArrowUp, AudioLines, Check, ChevronRight, Compass, Copy, Headphones,
-  Keyboard, LoaderCircle, MessageSquare, Mic, MicOff, Monitor, PhoneOff,
-  Settings2, ShieldCheck, Sparkles, Brain, X } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Compass, Copy, Headphones,
+  Keyboard, LoaderCircle, Mic, MicOff, Monitor, PhoneOff,
+  Settings2, ShieldCheck, Sparkles, Brain, X, Aperture, ArrowUpRight,
+  Globe, CalendarDays, Music2, House, Maximize2, Minimize2, Command, Radio, ScanLine } from 'lucide-react';
+
+import IntelligenceCore from './intelligence-core';
+
+const capabilities = [
+  { icon: Globe, label: 'Research', hint: 'Find a clearer answer', text: 'I have something I would like you to research.' },
+  { icon: CalendarDays, label: 'My day', hint: 'Calendar & reminders', text: 'What is on my calendar today?' },
+  { icon: House, label: 'My space', hint: 'Home & Mac controls', text: 'What can you help me control on my Mac and at home?' },
+  { icon: Music2, label: 'Music', hint: 'Your Spotify controls', text: 'What is currently playing on Spotify?' },
+  { icon: Brain, label: 'Memory', hint: 'A little more personal', text: 'What do you remember about me?' },
+];
 
 const prompts = [
   { icon: Compass, label: 'Plan my day', text: 'Can you help me plan my day?' },
@@ -62,6 +73,8 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   const agent = useAgent(session);
   const { messages, send, isSending } = useSessionMessages(session);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } = useLocalParticipant();
+  const [focused, setFocused] = useState(false);
+  const [clock, setClock] = useState('');
   const [mode, setMode] = useState<'voice' | 'text'>('voice');
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
@@ -83,6 +96,29 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
     : agent.state === 'failed' ? 'Agent unavailable' : agent.state === 'speaking' ? 'Ariana is speaking'
     : agent.state === 'thinking' ? 'Thinking it through' : !agent.isConnected ? 'Finding Ariana'
     : isMicrophoneEnabled ? 'Listening to you' : 'Ready for your message';
+
+  useEffect(() => {
+    const tick = () => setClock(new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if (dialog.current?.open) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault(); setFocused(false);
+        requestAnimationFrame(() => composer.current?.focus());
+      }
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, []);
+
+  useEffect(() => {
+    if (error || agent.state === 'failed') setFocused(false);
+  }, [error, agent.state]);
 
   useEffect(() => {
     const onError = (err: Error) => setError(friendlyError(err));
@@ -152,34 +188,46 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
     } catch { setError('Could not copy the conversation. Try selecting the text instead.'); }
   }
 
-  return <main className="app-shell">
-    <aside className="rail" aria-label="Workspace">
-      <a href="/" className="brand-mark" aria-label="Ariana home"><Sparkles size={25} /></a>
-      <div className="rail-center"><span className="rail-active" aria-label="Conversation"><AudioLines size={22} /></span><span className="rail-line" /></div>
-      <button className="icon-button" aria-label="Connection settings" onClick={() => dialog.current?.showModal()}><Settings2 size={20} /></button>
-    </aside>
+  const coreState = error || agent.state === 'failed' ? 'error' : connecting || reconnecting || (connected && !agent.isConnected) ? 'connecting' : !connected ? 'standby' : agent.state === 'thinking' ? 'thinking' : agent.state === 'speaking' ? 'speaking' : isMicrophoneEnabled ? 'listening' : 'ready';
+  const sessionTime = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  function stagePrompt(text: string) {
+    setFocused(false); setDraft(text);
+    requestAnimationFrame(() => { composer.current?.focus(); composer.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); });
+  }
+
+  return <main className={`app-shell ${focused ? 'focus-mode' : ''}`}>
+    <div className="ambient-grid" aria-hidden="true" />
+    <header className="topbar">
+      <a href="/" className="brand" aria-label="Ariana home"><span className="brand-mark"><Aperture size={28} strokeWidth={1.3} /></span><span className="brand-word">ARIANA<span>PERSONAL INTELLIGENCE</span></span></a>
+      <div className="topbar-centre"><span className="tiny-cross">+</span> YOUR WORLD. IN SYNC. <span className="tiny-cross">+</span></div>
+      <div className="topbar-controls">
+        <div className={`connection-pill ${connected ? 'online' : ''}`}><span />{reconnecting ? 'RECONNECTING' : connected ? 'CONNECTED' : connecting ? 'CONNECTING' : 'STANDBY'}</div>
+        <time className="local-clock" aria-label="Local time">{clock || '—:—:—'}</time>
+        <button className="icon-button focus-toggle" aria-label={focused ? 'Exit focus mode' : 'Enter focus mode'} aria-pressed={focused} onClick={() => setFocused(!focused)}>{focused ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</button>
+        <button className="icon-button" aria-label="Connection settings" onClick={() => dialog.current?.showModal()}><Settings2 size={18} /></button>
+      </div>
+    </header>
+
     <div className="workspace">
-      <header className="topbar">
-        <div className="brand"><span>Ariana</span><span className="brand-separator" /> <span className="workspace-label">A little more possible.</span></div>
-        <div className={`connection-pill ${connected ? 'online' : ''}`}><span />{connected ? 'Connected' : connecting ? 'Connecting' : 'Offline'}</div>
-      </header>
+      <aside className="systems-panel" aria-label="Workspace capabilities">
+        <div className="section-label">WORKSPACE<span>01</span></div>
+        <div className="workspace-active"><Aperture size={17} />Overview<span className="active-indicator" /></div>
+        <div className="capabilities-heading">CAPABILITIES</div>
+        <nav aria-label="Draft a request">{capabilities.map(({ icon: Icon, label, hint, text }) => <button className="capability" key={label} onClick={() => stagePrompt(text)}><Icon size={18} strokeWidth={1.4} /><span>{label}<small>{hint}</small></span><ArrowUpRight size={13} /></button>)}</nav>
+        <div className="session-readout"><div className="section-label">SESSION<ScanLine size={13} /></div><dl><div><dt>Connection</dt><dd>{reconnecting ? 'Reconnecting' : connected ? 'Established' : connecting ? 'Connecting' : 'Not started'}</dd></div><div><dt>Microphone</dt><dd>{isMicrophoneEnabled && connected ? 'Active' : 'Off'}</dd></div><div><dt>Screen</dt><dd>{isScreenShareEnabled ? 'Sharing' : 'Not shared'}</dd></div><div><dt>Messages</dt><dd>{String(visibleMessages.length).padStart(2, '0')}</dd></div></dl></div>
+        <div className="sidebar-note"><ShieldCheck size={15} /><p>ON YOUR TERMS<span>You choose when to connect<br />and what to share.</span></p></div>
+      </aside>
 
-      <div className="main-grid">
-        <section className="voice-panel" aria-labelledby="voice-heading">
-          <div className="eyebrow"><span className="small-line" /> YOUR EVERYDAY, REIMAGINED</div>
-          <h1 id="voice-heading">Hello. I’m <em>Ariana.</em></h1>
-          <p className="intro">Less to do. More room to think.<br />Your day, with a little help.</p>
-
-          <div className={`visualizer-scene ${connected ? 'active' : ''} ${agent.state === 'speaking' ? 'speaking' : ''} ${agent.state === 'thinking' ? 'thinking' : ''}`} aria-hidden="true">
-            <div className="orbit orbit-outer" /><div className="orbit orbit-middle" />
-            <div className="voice-orb"><div className="orb-ribbon ribbon-one" /><div className="orb-ribbon ribbon-two" /><div className="orb-ribbon ribbon-three" /><div className="orb-highlight" /><div className="orb-core">
-              {connected && agent.microphoneTrack ? <BarVisualizer state={agent.state} trackRef={agent.microphoneTrack} barCount={7} /> : <Sparkles size={42} strokeWidth={1.1} />}
-            </div></div><span className="orbit-point" />
-          </div>
-
-          <div className="voice-status" role="status"><span className={connected ? 'status-dot live' : 'status-dot'} />{status}</div>
-          {connected && <span className="session-time">{String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}</span>}
-
+      <section className="voice-panel" aria-labelledby="voice-heading">
+        <div className="core-heading"><span className="section-label">INTELLIGENCE CORE</span><span className="core-state-label">{coreState.toUpperCase()}</span></div>
+        <div className="hero-title"><div className="eyebrow">ALWAYS A LITTLE AHEAD</div><h1 id="voice-heading">At your command.</h1><p>Your ideas. Your world. A little more possible.</p></div>
+        <div className="visualizer-scene">
+          <div className="core-callout callout-left"><span>INPUT MODE</span><strong>{connected ? isMicrophoneEnabled ? 'VOICE + TEXT' : 'TEXT' : mode.toUpperCase()}</strong><i /></div>
+          <IntelligenceCore state={coreState} track={agent.microphoneTrack} />
+          <div className="core-callout callout-right"><span>SESSION TIME</span><strong>{connected ? sessionTime : '00:00'}</strong><i /></div>
+          <span className="core-caption">A R I A N A <span>/</span> INTERACTIVE CORE</span>
+        </div>
+        <div className="voice-status" role="status"><span className={`status-dot ${connected ? 'live' : ''}`} />{status}</div>
           {!connected && !connecting ? <>
             <button className="start-button" onClick={start}><Mic size={19} />Start conversation</button>
             <div className="mode-picker" aria-label="Conversation mode">
@@ -197,12 +245,13 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
           <StartAudio label="Enable Ariana’s audio" className="enable-audio" />
 
           <p className="mic-note"><ShieldCheck size={14} />{connected ? 'You control what you share.' : mode === 'voice' ? 'Your microphone stays off until you start.' : 'Start with text. Turn on your mic anytime.'}</p>
-        </section>
 
+        <div className="quick-commands"><div className="section-label">QUICK START<span>SELECT TO DRAFT</span></div><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => stagePrompt(text)}><Icon size={15} strokeWidth={1.5} /><span>{label}</span><ChevronRight size={13} /></button>)}</div></div>
+      </section>
         <section className="conversation-panel" aria-label="Conversation">
-          <header className="conversation-header"><div><h2>Conversation</h2><span>LIVE TRANSCRIPT</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
+          <header className="conversation-header"><div><h2>Conversation<span className="section-index">02</span></h2><span>VOICE + TEXT CHANNEL</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
           <div ref={transcript} className="transcript" role="log" aria-live="polite" aria-relevant="additions text">
-            {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><MessageSquare size={23} strokeWidth={1.4} /><span /></div><h3>A fresh start.</h3><p>Ask anything, or let’s figure it out together.<br />Your conversation lives here.</p></div>
+            {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><Radio size={27} strokeWidth={1} /><span /></div><h3>Channel standing by.</h3><p>Open a connection to Ariana.<br />Your exchange will appear here.</p></div>
             : visibleMessages.map((message) => {
               const isAgent = message.type === 'agentTranscript' || (message.from && !message.from.isLocal);
               return <article className={`message ${isAgent ? 'agent-message' : 'user-message'}`} key={message.id}><div className="message-label"><span>{isAgent ? 'ARIANA' : 'YOU'}</span><time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><p>{message.message}</p></article>;
@@ -211,15 +260,11 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
           </div>
           {error && <div className="error-banner" role="alert"><p>{error}</p><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}
           {connected && agent.state === 'failed' && <div className="error-banner" role="alert"><p>Ariana hasn’t joined yet. Check that your agent is running, then end this session and try again.</p></div>}
-          <form className="composer" onSubmit={submit}><input ref={composer} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={connected ? 'Or type a message…' : 'What’s on your mind?'} aria-label="Message Ariana" maxLength={4000} /><button aria-label="Send message" disabled={!agent.isConnected || !draft.trim() || isSending}>{isSending ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={20} />}</button></form>
+          <form className="composer" onSubmit={submit}><span className="command-caret" aria-hidden="true">›</span><input ref={composer} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={connected ? 'Or type a message…' : 'Enter a message…'} aria-label="Message Ariana" maxLength={4000} /><button aria-label="Send message" disabled={!agent.isConnected || !draft.trim() || isSending}>{isSending ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={20} />}</button></form>
           <div className="composer-hint"><Keyboard size={13} />{agent.isConnected ? 'Enter to send · voice and text work together' : 'Start a conversation to send a message'}</div>
         </section>
-      </div>
-
-      <section className="suggestions" aria-label="Conversation ideas"><p>MAKE SOME SPACE</p><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => { setDraft(text); composer.current?.focus(); }}><Icon size={18} /><span>{label}</span><ChevronRight size={16} /></button>)}</div></section>
-      <footer className="footer"><span><AudioLines size={14} /> Ariana · Your personal assistant</span><span>Voice. Ideas. Everyday things.</span></footer>
     </div>
-
+    <footer className="footer"><span><span className="footer-dot" />ARIANA<span className="footer-divider">/</span>PERSONAL WORKSPACE</span><button onClick={() => stagePrompt(draft)}><Command size={12} /><span>⌘ / CTRL + K</span><span className="footer-command-label">Command input</span></button><span>VOICE & TEXT<span className="footer-divider">/</span>LIVEKIT</span></footer>
     <dialog ref={dialog} className="settings-dialog" onClick={(event) => { if (event.target === dialog.current) dialog.current?.close(); }}>
       <header><div><p className="eyebrow">YOUR WORKSPACE</p><h2>Connection settings</h2></div><button className="icon-button" aria-label="Close settings" onClick={() => dialog.current?.close()}><X size={20} /></button></header>
       <p>Enter your private access code if this workspace requires one.</p>
