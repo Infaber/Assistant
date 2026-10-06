@@ -115,6 +115,11 @@ async def test_a_failed_file_prevents_partial_batch_submission():
     assert "error" in json.loads(await b.commit(invocation(["good", "bad"])))
     b.session.generate_reply.assert_not_called()
     assert b.total_files == 0
+    assert not b.uploads
+    upload(b, "replacement", {"content": ["A readable replacement"]})
+    assert json.loads(
+        await b.commit(invocation(["replacement"], request_id="replacement-send"))
+    )["accepted"]
 
 
 async def test_another_participant_cannot_commit_or_configure():

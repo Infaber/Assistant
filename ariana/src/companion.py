@@ -219,6 +219,9 @@ class CompanionBridge:
                     timeout=8,
                 )
                 if errors := [r["error"] for r in results if "error" in r]:
+                    # A rejected batch must not fill the inbox and block replacements.
+                    for key in ids:
+                        del self.uploads[key]
                     raise ValueError(errors[0])
                 content = [
                     question.strip()
