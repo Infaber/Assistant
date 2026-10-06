@@ -1,6 +1,6 @@
 # Ariana frontend
 
-A responsive Next.js frontend for the existing `ariana` LiveKit agent. It includes
+A futuristic command-centre frontend for the existing `ariana` LiveKit agent. It includes
 voice and text input, a live transcript, audio visualization, microphone controls,
 optional screen sharing, transcript copying, and connection/error feedback.
 
@@ -97,3 +97,9 @@ do not validate live audio, model responses, or screen interpretation.
 
 Built with [LiveKit's React frontend APIs](https://docs.livekit.io/frontends/)
 and [server-issued session tokens](https://docs.livekit.io/frontends/build/authentication/endpoint/).
+
+## Command centre
+
+The procedural particle globe reacts to Ariana’s actual audio level; connecting/thinking uses amber, and errors use red. The session panel displays real connection, microphone, screen-sharing and message state. Decorative rings are not performance gauges.
+
+Capability shortcuts and quick-start buttons draft requests without sending them. Use the expand button for focus mode; `⌘K` on Mac or `Ctrl+K` returns to the command input. Animations respect reduced-motion settings, and the canvas stops drawing in background tabs. The UI works without external fonts, images or additional rendering libraries.
