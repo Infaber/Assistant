@@ -10,6 +10,8 @@ from pathlib import Path
 
 from livekit.agents import RunContext, function_tool
 
+from action_events import observed
+
 _LOCK = threading.Lock()
 CHOICES = {
     "default_browser": {
@@ -140,6 +142,7 @@ def read_preferences() -> dict:
 
 
 @function_tool
+@observed("Preferences")
 async def preferences_manage(
     context: RunContext, action: str, key: str = "", value: str = ""
 ) -> dict:

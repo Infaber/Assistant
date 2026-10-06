@@ -9,6 +9,7 @@ from pathlib import Path
 
 from livekit.agents import RunContext, function_tool
 
+from action_events import observed
 from preferences_tools import preferences_path, read_preferences
 
 
@@ -114,6 +115,7 @@ def memory_context() -> str:
 
 
 @function_tool
+@observed("Personal memory")
 async def memory_manage(
     context: RunContext, action: str, topic: str = "", fact: str = ""
 ) -> dict:

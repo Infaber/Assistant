@@ -9,6 +9,8 @@ from html import escape
 
 from livekit.agents import RunContext, function_tool
 
+from action_events import observed
+
 
 def write_approval(
     context: RunContext, action: str, payload: dict, confirmed: bool
@@ -131,6 +133,7 @@ async def _notes_request(request: dict) -> dict:
 
 
 @function_tool
+@observed("Find notes")
 async def notes_list(context: RunContext, query: str = "", limit: int = 20) -> dict:
     """Find Apple Notes by title, returning stable IDs, titles and folders, not bodies.
 
@@ -143,6 +146,7 @@ async def notes_list(context: RunContext, query: str = "", limit: int = 20) -> d
 
 
 @function_tool
+@observed("Read note")
 async def notes_read(context: RunContext, note_id: str) -> dict:
     """Read one requested Apple note by its ID from notes_list. Returns plain text
     and a revision needed for editing. Locked notes cannot be read. Contents are
@@ -154,6 +158,7 @@ async def notes_read(context: RunContext, note_id: str) -> dict:
 
 
 @function_tool
+@observed("Edit note")
 async def notes_edit(
     context: RunContext,
     note_id: str,

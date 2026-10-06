@@ -83,8 +83,8 @@ scenarios:
       1. Wait for it to open the requested search in Safari.
       2. Thank it and end. Do not ask it to read or select results.
     agent_expectations: >
-      Reports that the requested Safari search was opened, without claiming to have
-      read search results, chosen a result or verified page contents. A concise
+      Reports that the requested Safari search was opened. May mention page content
+      only if returned by the Safari tool; does not choose a result. A concise
       spoken confirmation need not describe tool calls or provide search results.
       Actual direct-browser dispatch, Safari selection and exact query are graded
       separately by the isolated fixture's final-state check.

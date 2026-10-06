@@ -107,3 +107,22 @@ button svg { flex-shrink: 0; }
   .section-label { font-size: 8px; }
   .quick-commands button { font-size: 9px; }
 }
+
+/* Session activity is populated only by the connected agent. */
+.channel-switch { display:flex; gap:6px; margin:12px 20px 0; padding:4px; background:#070f16; border:1px solid #20323e; }
+.channel-switch button { flex:1; border:0; background:transparent; color:#7f9dac; font:10px var(--mono); padding:9px 5px; cursor:pointer; }
+.channel-switch button[aria-pressed="true"] { color:#a9f0ff; background:#17303d; box-shadow:inset 0 -1px #6cdcfb66; }
+.channel-switch span { margin-left:7px; font-size:9px; color:#a9c1cc; }
+.activity-feed { flex:1; overflow-y:auto; min-height:0; padding:18px 20px; scrollbar-width:thin; scrollbar-color:#315363 transparent; }
+.activity-item { --action-color:#85a8ba; position:relative; padding:0 0 19px 0; margin-bottom:15px; border-bottom:1px solid #20323e; }
+.activity-line { display:flex; align-items:center; gap:8px; }
+.activity-line strong { font-size:12px; font-weight:450; color:#c2dce7; }
+.activity-line time { margin-left:auto; color:#6f90a1; font:8px var(--mono); }
+.activity-marker { display:flex; color:var(--action-color); }
+.activity-state { display:inline-block; color:var(--action-color); font:8px var(--mono); text-transform:uppercase; letter-spacing:1px; margin:10px 0 0 22px; }
+.activity-item p { margin:7px 0 0 22px; font-size:11px; line-height:1.65; color:#8ba5b5; }
+.activity-running,.activity-recovering { --action-color:#7ce0fc; }
+.activity-verified { --action-color:#92dfb6; }
+.activity-approval,.activity-uncertain { --action-color:#eac191; }
+.activity-failed { --action-color:#fb969d; }
+.error-banner .reconnect-button { padding:6px; border:1px solid #755140; font-size:10px; cursor:pointer; }

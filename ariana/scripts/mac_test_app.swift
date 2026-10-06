@@ -31,7 +31,8 @@ class FrameButton: NSView {
         wantsLayer = true; layer?.backgroundColor = NSColor.systemBlue.cgColor
     }
     required init?(coder: NSCoder) { fatalError() }
-    override func mouseDown(with event: NSEvent) { output.stringValue = "Frame clicked" }
+    override func mouseDown(with event: NSEvent) { output.stringValue = event.clickCount == 2 ? "Double clicked" : "Frame clicked" }
+    override func rightMouseDown(with event: NSEvent) { output.stringValue = "Context clicked" }
     override func accessibilityActionNames() -> [NSAccessibility.Action] { [] }
 }
 window.contentView!.addSubview(FrameButton(label))

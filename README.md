@@ -7,14 +7,14 @@ Mac to use its Apple apps and desktop controls.
 ## What Ariana can do
 
 - Talk through your microphone or the web frontend, with a live transcript.
-- Search the web and browse public pages.
+- Search, open, and read pages in your real Safari browser.
 - Control your Home Assistant devices and get YR weather forecasts.
 - Read Apple Calendar, Reminders, Mail, and Notes; create events, reminders, emails,
   and notes when requested and confirmed.
 - Find and read notes, then append to or replace a selected note with confirmation.
-- Open Mac apps, inspect accessible controls, click, type, use shortcuts, and scroll.
+- Open Mac apps, inspect accessible controls, click, right-click, double-click, type, use shortcuts, and scroll.
 - Search Spotify and control playback directly, including Play, Pause, and skipping.
-- Search or open websites directly in Safari, Chrome, Edge, Brave, or Firefox.
+- Find and select existing Safari tabs when requested; follow links from page content.
 - Remember useful interests, routines and ongoing projects naturally across conversations; correct, forget or pause memory on request.
 - Check integration configuration and save explicit browser/response preferences.
 
@@ -47,8 +47,8 @@ frontend is **not** inside `ariana/`.
 - macOS for Apple apps, local Spotify, and desktop controls. The native desktop
   helper needs Apple Command Line Tools: `xcode-select --install` if missing.
 
-A hosted Linux worker can run conversations and web tools, but cannot control
-your Mac or its Apple apps remotely.
+A hosted Linux worker can run conversations, Home Assistant and weather tools, but
+Safari browsing and Apple app controls require the agent to run on your Mac.
 
 ## First-time setup
 
@@ -58,7 +58,6 @@ Clone the repository and install the agent dependencies:
 git clone https://github.com/Infaber/Assistant.git
 cd Assistant/ariana
 uv sync --locked
-uv run playwright install webkit
 cp -n .env.example .env.local
 ```
 
@@ -245,3 +244,44 @@ Ariana remembers useful, non-sensitive facts you tell her about yourself without
 Memory stays on the machine running the Python agent, in `~/Library/Application Support/Ariana/memory.sqlite3` on macOS. It stores up to 100 short facts, with the 20 most recently updated supplied at startup; she can search the remaining facts. Fixed preferences stay in the existing preferences file. This is not a recording or complete conversation archive. Sensitive details, credentials and information read from apps/websites should not be saved. Moving the agent to another machine does not automatically move its memory.
 
 The frontend uses a dark command-centre design with a procedural holographic globe, audio-reactive animation, capability shortcuts, focus mode, responsive layouts and reduced-motion support. Start it with `cd frontend` then `npm run dev`, and open the localhost address printed in the terminal. Start the Python agent separately for conversations.
+
+## Safari browsing and verified Mac actions
+
+Ariana uses **Safari only** for web browsing. The Python Playwright browser and
+separate search provider have been removed. Existing `ARIANA_BROWSER_*` and
+`ARIANA_SEARCH_TIMEOUT_SECONDS` settings are no longer used. Saved browser
+preferences do not override Safari-only operation.
+
+Allow Safari under **System Settings → Privacy & Security → Automation** for the
+app running Ariana. Page reads first try a fixed, read-only Safari script and then
+macOS Accessibility. Accessibility reads can omit custom/offscreen content and are
+labeled accordingly. For fuller page text, Safari's **Develop → Allow JavaScript
+from Apple Events** is optional. Ariana cannot bypass a site's login or CAPTCHA.
+New searches/pages open in a separate Safari window; existing tabs are read only
+on request. Local HTTP(S) pages are supported when requested. Page contents never
+authorize actions.
+
+Mac input uses inspected controls, not guessed screen coordinates. Each input
+consumes its snapshot and includes a fresh observation of the same app. Text is
+read back when the editable field exposes its value and selection. `verified`
+applies to that operation, not an entire multi-step task. Timeouts remain uncertain:
+Ariana checks the result rather than automatically repeating a click or write.
+Right-click and double-click also require an inspected, unobstructed target.
+
+The frontend's **Activity** view shows live action progress, approval requests,
+verified results and failures. It retains at most 40 events for the current
+connection, in memory only; it does not include tool arguments, page text, notes,
+or provider error payloads. Plain-text results from older integrations are marked
+“Result returned”, not “Verified”. A disconnected in-flight action becomes
+“Needs checking”. Use the conversation for Ariana's explanation.
+
+Provider quota/authentication failures appear with actionable messages. By default,
+reconnect explicitly after resolving the problem. Advanced users may set
+`ARIANA_FALLBACK_GOOGLE_MODEL` to a compatible Gemini Live model available to their
+account: Ariana attempts that backup once per session after a terminal model
+failure, carrying conversation context. It does not resubmit the last user turn.
+A backup using the same Google project may share the same quota; it is not a quota
+workaround. Leave the setting empty unless you have tested that model.
+
+Frontend Playwright remains a **development test dependency** for WebKit UI
+checks; Ariana never uses it to browse.

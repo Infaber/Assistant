@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 from livekit.agents import RunContext, function_tool
 
+from action_events import observed
+
 SPOTIFY_JXA = r"""
 function run(argv) {
     const req=JSON.parse(argv[0]);
@@ -67,6 +69,7 @@ def _run_spotify(request: dict) -> dict:
 
 
 @function_tool
+@observed("Spotify")
 async def spotify_control(context: RunContext, action: str, query: str = "") -> dict:
     """Control the local Spotify app directly: search, play, pause, next, previous,
     status or quit. Prefer this over mac_control for Spotify search and playback.

@@ -72,12 +72,17 @@ async def check():
             )["success"]
             await asyncio.sleep(0.15)
             view = await inspect()
+            assert any(e.get("selected_range") == [0, 14] for e in view["elements"]), [
+                (e["role"], e.get("selected_range")) for e in view["elements"]
+            ]
             text = "Ariana café 😀 " * 4
             assert (
                 await control(ctx, "type", snapshot_id=view["snapshot_id"], text=text)
             )["success"]
             view = await inspect("Ariana Test Search")
-            assert any(e["value"] == text for e in view["elements"])
+            assert any(e["value"] == text for e in view["elements"]), [
+                (e["role"], e["value"]) for e in view["elements"]
+            ]
             for label, expected in [
                 ("Ariana Test Button", "Button clicked"),
                 ("Ariana Frame Button", "Frame clicked"),
@@ -95,14 +100,30 @@ async def check():
                 await asyncio.sleep(0.1)
                 view = await inspect(expected)
                 assert any(e["value"] == expected for e in view["elements"])
+            for action, expected in [
+                ("context_click", "Context clicked"),
+                ("double_click", "Double clicked"),
+            ]:
+                view = await inspect("Ariana Frame Button")
+                element = next(e for e in view["elements"] if e["role"] == "AXButton")
+                result = await control(
+                    ctx,
+                    action,
+                    snapshot_id=view["snapshot_id"],
+                    element_id=element["id"],
+                )
+                assert result["success"], result
+                assert any(
+                    e["value"] == expected for e in result["observation"]["elements"]
+                ), result
             view = await inspect("Ariana Covered Frame")
             element = next(e for e in view["elements"] if e["role"] == "AXButton")
             result = await control(
                 ctx, "click", snapshot_id=view["snapshot_id"], element_id=element["id"]
             )
             assert result.get("code") == "occluded", result
-            view = await inspect("Frame clicked")
-            assert any(e["value"] == "Frame clicked" for e in view["elements"])
+            view = await inspect("Double clicked")
+            assert any(e["value"] == "Double clicked" for e in view["elements"])
             view = await inspect()
             assert (
                 await control(
@@ -124,7 +145,7 @@ async def check():
             view = await control(ctx, "inspect")
             assert view["window"] == "Ariana Second QA Window"
             print(
-                "PASS: Unicode replacement, focused typing, layout-aware shortcut, native press, verified frame click, interactive-child rejection, directional scroll dispatch, window switching."
+                "PASS: Unicode replacement, focused typing, layout-aware shortcut, native press, verified frame click, interactive-child rejection, context click, double click, directional scroll dispatch, window switching."
             )
         finally:
             app.terminate()

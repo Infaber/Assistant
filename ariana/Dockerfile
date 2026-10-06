@@ -18,8 +18,6 @@ ENV UV_COMPILE_BYTECODE=1
 # Ensure local models are downloaded to a shared directory accessible by all stages.
 ENV HF_HOME=/app/.cache/huggingface
 ENV TORCH_HOME=/app/.cache/torch
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-ENV ARIANA_BROWSER_HEADLESS=1
 
 # --- Build stage ---
 # Install dependencies, build native extensions, and prepare the application
@@ -81,11 +79,6 @@ RUN adduser \
 COPY --from=build --chown=appuser:appuser /app /app
 
 WORKDIR /app
-
-# Install the WebKit runtime and native libraries used by the browser toolset.
-# WebKit is Safari-like, but it does not control the installed Safari app.
-RUN uv run playwright install --with-deps webkit \
-  && chmod -R a+rX /ms-playwright
 
 # Switch to the non-privileged user for all subsequent operations
 # This improves security by not running as root

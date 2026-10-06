@@ -78,3 +78,16 @@ test('capability commands draft without sending and focus mode returns to input'
   await expect(page.getByRole('region', { name: 'Conversation', exact: true }).getByRole('alert')).toContainText('Connection unavailable for this test.');
   await expect(page.getByRole('button', { name: 'Start conversation' })).toBeEnabled();
 });
+
+
+test('activity starts empty, stays responsive on mobile, and drafting returns to conversation', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Activity 0', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Waiting for a task.' })).toBeVisible();
+  await expect(page.getByRole('log', { name: 'Action activity' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Think it through' }).click();
+  await expect(page.getByRole('button', { name: 'Conversation', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: 'Message Ariana' })).toBeFocused();
+});

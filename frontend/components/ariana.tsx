@@ -6,13 +6,14 @@ import {
   useAgent, useLocalParticipant, useSession, useSessionMessages,
   type UseSessionReturn,
 } from '@livekit/components-react';
-import { ConnectionState, RoomEvent, TokenSource } from 'livekit-client';
+import { ConnectionState, DisconnectReason, ParticipantKind, RoomEvent, TokenSource, type RemoteParticipant, type DataPacket_Kind } from 'livekit-client';
 import { ArrowUp, Check, ChevronRight, Compass, Copy, Headphones,
   Keyboard, LoaderCircle, Mic, MicOff, Monitor, PhoneOff,
   Settings2, ShieldCheck, Sparkles, Brain, X, Aperture, ArrowUpRight,
   Globe, CalendarDays, Music2, House, Maximize2, Minimize2, Command, Radio, ScanLine } from 'lucide-react';
 
 import IntelligenceCore from './intelligence-core';
+import { parseActivity, updateActivity, finishActivity, type Activity } from '../lib/activity';
 
 const capabilities = [
   { icon: Globe, label: 'Research', hint: 'Find a clearer answer', text: 'I have something I would like you to research.' },
@@ -74,6 +75,9 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   const { messages, send, isSending } = useSessionMessages(session);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } = useLocalParticipant();
   const [focused, setFocused] = useState(false);
+  const [panel, setPanel] = useState<'conversation' | 'activity'>('conversation');
+  const [activity, setActivity] = useState<Activity[]>([]);
+  const [providerError, setProviderError] = useState('');
   const [clock, setClock] = useState('');
   const [mode, setMode] = useState<'voice' | 'text'>('voice');
   const [busy, setBusy] = useState(false);
@@ -92,7 +96,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   const connecting = busy || session.connectionState === ConnectionState.Connecting;
   const reconnecting = [ConnectionState.Reconnecting, ConnectionState.SignalReconnecting].includes(session.connectionState);
   const visibleMessages = messages.filter((message) => !hiddenMessages.has(message.id));
-  const status = reconnecting ? 'Reconnecting' : !connected ? (connecting ? 'Connecting' : 'Ready when you are')
+  const status = providerError ? 'Connection needs attention' : reconnecting ? 'Reconnecting' : !connected ? (connecting ? 'Connecting' : 'Ready when you are')
     : agent.state === 'failed' ? 'Agent unavailable' : agent.state === 'speaking' ? 'Ariana is speaking'
     : agent.state === 'thinking' ? 'Thinking it through' : !agent.isConnected ? 'Finding Ariana'
     : isMicrophoneEnabled ? 'Listening to you' : 'Ready for your message';
@@ -108,7 +112,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
     const shortcut = (event: KeyboardEvent) => {
       if (dialog.current?.open) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault(); setFocused(false);
+        event.preventDefault(); setFocused(false); setPanel('conversation');
         requestAnimationFrame(() => composer.current?.focus());
       }
     };
@@ -117,8 +121,28 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
   }, []);
 
   useEffect(() => {
-    if (error || agent.state === 'failed') setFocused(false);
-  }, [error, agent.state]);
+    if (error || providerError || agent.state === 'failed') setFocused(false);
+  }, [error, providerError, agent.state]);
+
+  useEffect(() => {
+    const receive = (payload: Uint8Array, participant?: RemoteParticipant, _kind?: DataPacket_Kind, topic?: string) => {
+      if (topic !== 'ariana.activity' || participant?.kind !== ParticipantKind.AGENT) return;
+      const event = parseActivity(payload);
+      if (!event) return;
+      setActivity(rows => updateActivity(rows, event));
+      if (event.kind === 'system' && event.status === 'failed') setProviderError(event.detail);
+    };
+    const disconnected = (reason?: DisconnectReason) => {
+      setActivity(finishActivity);
+      if (reason !== DisconnectReason.CLIENT_INITIATED) setProviderError(current => current || 'The connection ended unexpectedly. Reconnect to start a fresh session; check any unfinished action before repeating it.');
+    };
+    session.room.on(RoomEvent.DataReceived, receive);
+    session.room.on(RoomEvent.Disconnected, disconnected);
+    return () => {
+      session.room.off(RoomEvent.DataReceived, receive);
+      session.room.off(RoomEvent.Disconnected, disconnected);
+    };
+  }, [session.room]);
 
   useEffect(() => {
     const onError = (err: Error) => setError(friendlyError(err));
@@ -142,7 +166,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
 
   async function start() {
     if (connecting || connected) return;
-    setBusy(true); setError(''); setSeconds(0);
+    setBusy(true); setError(''); setProviderError(''); setActivity([]); setSeconds(0);
     setHiddenMessages(new Set(messages.map((message) => message.id)));
     const controller = new AbortController();
     abort.current = controller;
@@ -173,7 +197,7 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!draft.trim() || !agent.isConnected || isSending) return;
+    if (!draft.trim() || !agent.isConnected || isSending || providerError) return;
     const text = draft.trim();
     setError('');
     try { await send(text); setDraft(''); } catch { setError('Your message could not be sent. Please try again.'); }
@@ -188,10 +212,10 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
     } catch { setError('Could not copy the conversation. Try selecting the text instead.'); }
   }
 
-  const coreState = error || agent.state === 'failed' ? 'error' : connecting || reconnecting || (connected && !agent.isConnected) ? 'connecting' : !connected ? 'standby' : agent.state === 'thinking' ? 'thinking' : agent.state === 'speaking' ? 'speaking' : isMicrophoneEnabled ? 'listening' : 'ready';
+  const coreState = error || providerError || agent.state === 'failed' ? 'error' : connecting || reconnecting || (connected && !agent.isConnected) ? 'connecting' : !connected ? 'standby' : agent.state === 'thinking' ? 'thinking' : agent.state === 'speaking' ? 'speaking' : isMicrophoneEnabled ? 'listening' : 'ready';
   const sessionTime = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
   function stagePrompt(text: string) {
-    setFocused(false); setDraft(text);
+    setFocused(false); setPanel('conversation'); setDraft(text);
     requestAnimationFrame(() => { composer.current?.focus(); composer.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); });
   }
 
@@ -249,18 +273,23 @@ function Workspace({ session, prepare, onCodeChange }: { session: UseSessionRetu
         <div className="quick-commands"><div className="section-label">QUICK START<span>SELECT TO DRAFT</span></div><div>{prompts.map(({ icon: Icon, label, text }) => <button key={label} onClick={() => stagePrompt(text)}><Icon size={15} strokeWidth={1.5} /><span>{label}</span><ChevronRight size={13} /></button>)}</div></div>
       </section>
         <section className="conversation-panel" aria-label="Conversation">
-          <header className="conversation-header"><div><h2>Conversation<span className="section-index">02</span></h2><span>VOICE + TEXT CHANNEL</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
-          <div ref={transcript} className="transcript" role="log" aria-live="polite" aria-relevant="additions text">
+          <header className="conversation-header"><div><h2>{panel === 'conversation' ? 'Conversation' : 'Activity'}<span className="section-index">02</span></h2><span>{panel === 'conversation' ? 'VOICE + TEXT CHANNEL' : 'LIVE ACTION FEED'}</span></div><button className="icon-button" aria-label={copied ? 'Transcript copied' : 'Copy transcript'} disabled={!visibleMessages.length} onClick={copyTranscript}>{copied ? <Check size={18} /> : <Copy size={18} />}</button></header>
+          <div className="channel-switch" role="group" aria-label="Channel view"><button aria-pressed={panel === 'conversation'} onClick={() => setPanel('conversation')}>Conversation</button><button aria-pressed={panel === 'activity'} onClick={() => setPanel('activity')}>Activity{' '}<span>{activity.length}</span></button></div>
+          {panel === 'activity' ? <div className="activity-feed" role="log" aria-label="Action activity" aria-live="polite">
+            {!activity.length ? <div className="empty-transcript"><div className="empty-icon"><ScanLine size={26} strokeWidth={1} /></div><h3>Waiting for a task.</h3><p>Real actions appear here as Ariana works.<br />Page text and personal data stay out of this feed.</p></div>
+            : [...activity].reverse().map(item => <article className={`activity-item activity-${item.status}`} key={item.id}><div className="activity-line"><span className="activity-marker">{item.status === 'running' || item.status === 'recovering' ? <LoaderCircle size={14} className="spin" /> : item.status === 'verified' ? <Check size={14} /> : <ScanLine size={14} />}</span><strong>{item.label}</strong><time>{new Date(item.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><span className="activity-state">{({ running: 'Working', returned: 'Result returned', verified: 'Verified', approval: 'Approval needed', uncertain: 'Needs checking', failed: 'Could not complete', recovering: 'Reconnecting' })[item.status]}</span><p>{item.detail}</p></article>)}
+          </div> : <div ref={transcript} className="transcript" role="log" aria-live="polite" aria-relevant="additions text">
             {visibleMessages.length === 0 ? <div className="empty-transcript"><div className="empty-icon"><Radio size={27} strokeWidth={1} /><span /></div><h3>Channel standing by.</h3><p>Open a connection to Ariana.<br />Your exchange will appear here.</p></div>
             : visibleMessages.map((message) => {
               const isAgent = message.type === 'agentTranscript' || (message.from && !message.from.isLocal);
               return <article className={`message ${isAgent ? 'agent-message' : 'user-message'}`} key={message.id}><div className="message-label"><span>{isAgent ? 'ARIANA' : 'YOU'}</span><time>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div><p>{message.message}</p></article>;
             })}
             {connected && agent.state === 'thinking' && <div className="thinking-indicator"><span /><span /><span /><span className="sr-only">Ariana is thinking</span></div>}
-          </div>
+          </div>}
+          {providerError && <div className="error-banner" role="alert"><p>{providerError}</p><button className="reconnect-button" disabled={connecting} onClick={connected ? end : start}>{connected ? 'End session' : 'Reconnect'}</button></div>}
           {error && <div className="error-banner" role="alert"><p>{error}</p><button aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}
           {connected && agent.state === 'failed' && <div className="error-banner" role="alert"><p>Ariana hasn’t joined yet. Check that your agent is running, then end this session and try again.</p></div>}
-          <form className="composer" onSubmit={submit}><span className="command-caret" aria-hidden="true">›</span><input ref={composer} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={connected ? 'Or type a message…' : 'Enter a message…'} aria-label="Message Ariana" maxLength={4000} /><button aria-label="Send message" disabled={!agent.isConnected || !draft.trim() || isSending}>{isSending ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={20} />}</button></form>
+          <form className="composer" onSubmit={submit}><span className="command-caret" aria-hidden="true">›</span><input ref={composer} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={connected ? 'Or type a message…' : 'Enter a message…'} aria-label="Message Ariana" maxLength={4000} /><button aria-label="Send message" disabled={!agent.isConnected || !draft.trim() || isSending || !!providerError}>{isSending ? <LoaderCircle size={19} className="spin" /> : <ArrowUp size={20} />}</button></form>
           <div className="composer-hint"><Keyboard size={13} />{agent.isConnected ? 'Enter to send · voice and text work together' : 'Start a conversation to send a message'}</div>
         </section>
     </div>

@@ -177,7 +177,8 @@ async def test_focused_field_replacement_and_snapshot_consumption():
         )
     )["success"]
     assert desktop.query == "New search" and not desktop.searched
-    assert "mac_snapshot" not in ctx.session.userdata
+    assert "mac_snapshot" in ctx.session.userdata
+    assert ctx.session.userdata["mac_snapshot"]["id"] != r["snapshot_id"]
 
 
 @pytest.mark.asyncio
@@ -204,8 +205,8 @@ async def test_shortcut_aliases_and_function_keys():
             modifiers=["cmd", "alt"],
         )
     )["success"]
-    assert desktop.events[-1]["key_code"] == 96
-    assert desktop.events[-1]["modifiers"] == ["command", "option"]
+    assert desktop.events[-2]["key_code"] == 96
+    assert desktop.events[-2]["modifiers"] == ["command", "option"]
 
 
 @pytest.mark.asyncio
@@ -237,7 +238,7 @@ async def test_window_selection_preserves_server_side_target():
             ctx, "focus_window", snapshot_id=r["snapshot_id"], window_id="w0"
         )
     )["success"]
-    assert events[-1]["window_target"]["signature"] == "private"
+    assert events[-2]["window_target"]["signature"] == "private"
     assert "signature" not in r["windows"][0]
 
 
@@ -276,21 +277,28 @@ async def test_parallel_inspections_are_serialized(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_saved_browser_is_used_only_without_explicit_browser(monkeypatch):
-    ctx = SimpleNamespace(session=SimpleNamespace(userdata={}))
-    monkeypatch.setattr(mac.sys, "platform", "darwin")
-    preferences = Mock(return_value={"default_browser": "Firefox"})
-    backend = Mock(return_value={"success": True})
-    monkeypatch.setattr(mac, "read_preferences", preferences)
-    monkeypatch.setattr(mac, "_run_browser", backend)
+async def test_browser_always_uses_safari_and_rejects_other_browsers():
+    ctx, desktop = context()
     assert (await mac.mac_control._func(ctx, "browser_search", query="LiveKit"))[
         "success"
     ]
-    assert backend.call_args.args[0]["app_name"] == "Firefox"
-    assert (
-        await mac.mac_control._func(
-            ctx, "browser_search", app_name="Safari", query="LiveKit"
-        )
-    )["success"]
-    assert backend.call_args.args[0]["app_name"] == "Safari"
-    assert preferences.call_count == 1
+    assert desktop.app == "Safari"
+    assert "error" in await mac.mac_control._func(
+        ctx, "browser_search", app_name="Chrome", query="LiveKit"
+    )
+    assert len(desktop.events) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["context_click", "double_click"])
+async def test_additional_clicks_keep_guarded_targets_and_observe(action):
+    ctx, desktop = context()
+    fn = mac.mac_control._func
+    view = await fn(ctx, "inspect")
+    result = await fn(ctx, action, snapshot_id=view["snapshot_id"], element_id="e0")
+    assert result["observation"]["snapshot_id"] != view["snapshot_id"]
+    assert desktop.events[-2]["target"]["signature"] == "search-button"
+    assert desktop.events[-1]["expected_pid"] == 77
+    assert "error" in await fn(
+        ctx, action, snapshot_id=view["snapshot_id"], element_id="e0"
+    )
