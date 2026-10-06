@@ -45,7 +45,7 @@ def test_simulation_fixtures_are_scoped_to_the_session(monkeypatch, fixture):
             userdata=lambda: {"fixture": fixture}
         )
     )
-    session = object()
+    session = SimpleNamespace(userdata={})
     simulation_tools.configure_simulation_tools(ctx, session, Assistant)
     args, kwargs = install.call_args
     assert args[0] is Assistant

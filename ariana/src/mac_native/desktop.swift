@@ -48,7 +48,12 @@ func describe(_ element: AXUIElement) -> [String: Any] {
     let description = string(element, "AXDescription")
     let value = secure ? "[protected]" : String(string(element, "AXValue").prefix(200))
     let name = title.isEmpty && role == "AXStaticText" ? value : title
-    return ["role": role, "subrole": subrole, "name": name,
+    var selectedRange: [Int] = []
+    if !secure, let raw = attr(element, "AXSelectedTextRange"), CFGetTypeID(raw) == AXValueGetTypeID() {
+        var range = CFRange()
+        if AXValueGetValue(unsafeBitCast(raw, to: AXValue.self), .cfRange, &range) { selectedRange = [range.location, range.length] }
+    }
+    return ["selected_range": selectedRange, "role": role, "subrole": subrole, "name": name,
             "label": description.isEmpty ? name : description, "value": value,
             "identifier": string(element, "AXIdentifier"),
             "enabled": attr(element, "AXEnabled") as? Bool ?? true, "secure": secure,
@@ -89,6 +94,9 @@ if front.bundleIdentifier == "com.apple.loginwindow" {
     fail("Your Mac is locked. Unlock it before using interface controls.", "screen_locked")
 }
 let pid = front.processIdentifier
+if let expected = req["expected_pid"] as? Int, expected != Int(pid) {
+    fail("App focus changed. Inspect the intended app again before continuing.", "stale_target")
+}
 let app = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(app, 0.15)
 // Chromium apps may leave their Accessibility tree dormant until explicitly requested.
@@ -121,6 +129,51 @@ guard let windowRaw = attr(app, "AXFocusedWindow"), CFGetTypeID(windowRaw) == AX
 let window = unsafeBitCast(windowRaw, to: AXUIElement.self)
 let title = string(window, "AXTitle")
 let menus = attr(app, "AXMenuBar").flatMap { CFGetTypeID($0) == AXUIElementGetTypeID() ? unsafeBitCast($0, to: AXUIElement.self) : nil }
+if action == "read_page" {
+    guard front.bundleIdentifier == "com.apple.Safari" else { fail("Bring the requested Safari tab forward before reading.", "wrong_app") }
+    let started = Date()
+    var queue: [(AXUIElement, Int)] = [(window, 0)]
+    var cursor = 0
+    var web: AXUIElement?
+    while cursor < queue.count && cursor < 500 && Date().timeIntervalSince(started) < 1.5 {
+        let (item, depth) = queue[cursor]; cursor += 1
+        if string(item, "AXRole") == "AXWebArea" { web = item; break }
+        if depth < 25 { for child in children(item) { queue.append((child, depth + 1)) } }
+    }
+    guard let page = web else { fail("Safari's page content is not accessible yet.", "page_unavailable") }
+    func pageURL(_ item: AXUIElement) -> String {
+        if let url = attr(item, "AXURL") as? URL { return url.absoluteString }
+        return string(item, "AXURL")
+    }
+    let url = pageURL(page)
+    guard !url.isEmpty, url == req["expected_url"] as? String else { fail("Safari's visible page changed or its URL cannot be verified.", "page_changed") }
+    queue = [(page, 0)]; cursor = 0
+    var texts: [String] = [], links: [[String: String]] = []
+    var textCount = 0, seenText = Set<String>(), truncated = false
+    while cursor < queue.count {
+        if cursor >= 2500 || Date().timeIntervalSince(started) > 4 || textCount >= 12000 { truncated = true; break }
+        let (item, depth) = queue[cursor]; cursor += 1
+        let role = string(item, "AXRole")
+        if (role + string(item, "AXSubrole")).lowercased().contains("secure") || attr(item, "AXProtectedContent") as? Bool == true { continue }
+        if ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"].contains(role) { continue }
+        if ["AXStaticText", "AXHeading", "AXLink"].contains(role) {
+            let value = string(item, "AXValue")
+            let text = value.isEmpty ? string(item, "AXTitle") : value
+            if !text.isEmpty && seenText.insert(text).inserted { texts.append(String(text.prefix(2000))); textCount += text.count }
+            if role == "AXLink", links.count < 40 {
+                let href = pageURL(item)
+                if href.hasPrefix("https://") || href.hasPrefix("http://") { links.append(["text": String(text.prefix(160)), "href": href]) }
+            }
+        }
+        let next = children(item)
+        if depth >= 35 { if !next.isEmpty { truncated = true }; continue }
+        for child in next { queue.append((child, depth + 1)) }
+    }
+    guard workspace.frontmostApplication?.processIdentifier == pid, pageURL(page) == url else { fail("Safari changed during reading.", "page_changed") }
+    output(["text": String(texts.joined(separator: "\n").prefix(12000)), "links": links, "url": url,
+            "verified": !texts.isEmpty, "source": "safari_accessibility", "truncated": truncated,
+            "message": "Accessible page text only; offscreen or custom content may be omitted."])
+}
 if action == "inspect" {
     let start = Date()
     var queue: [(AXUIElement, [Any], Int)] = []
@@ -239,9 +292,33 @@ func keyPress(_ code: CGKeyCode, _ flags: CGEventFlags = []) {
     checkFocus()
     guard let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true),
           let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else { fail("Could not create keyboard events.") }
-    down.flags = flags; up.flags = flags; down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+    down.flags = flags; up.flags = flags; down.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.02)
+    up.post(tap: .cghidEventTap)
 }
 switch action {
+case "context_click":
+    guard let current = target else { fail("Select an inspected element.") }
+    checkFocus()
+    if actions(current).contains("AXShowMenu") {
+        guard AXUIElementPerformAction(current, "AXShowMenu" as CFString) == .success else { fail("Context menu result uncertain. Inspect before retrying.", "uncertain_action") }
+    } else {
+        let point = pointFor(current); checkFocus()
+        guard let down = CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: point, mouseButton: .right),
+              let up = CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: point, mouseButton: .right) else { fail("Could not create context click.") }
+        down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+    }
+case "double_click":
+    guard let current = target else { fail("Select an inspected element.") }
+    let point = pointFor(current); checkFocus()
+    for count in 1...2 {
+        checkFocus()
+        guard let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left),
+              let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left) else { fail("Could not create double click.") }
+        down.setIntegerValueField(.mouseEventClickState, value: Int64(count))
+        up.setIntegerValueField(.mouseEventClickState, value: Int64(count))
+        down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+    }
 case "click":
     guard let current = target else { fail("Select an inspected element.") }
     checkFocus()
@@ -260,7 +337,17 @@ case "type":
     }
     let nowFocused = attr(app, "AXFocusedUIElement")
     guard attr(current, "AXFocused") as? Bool == true || (nowFocused != nil && CFEqual(nowFocused!, current)) else { fail("Could not focus the requested text field.") }
+    var expectedText: String?
+    if let old = attr(current, "AXValue") as? String,
+       let raw = attr(current, "AXSelectedTextRange"), CFGetTypeID(raw) == AXValueGetTypeID() {
+        var selection = CFRange()
+        if AXValueGetValue(unsafeBitCast(raw, to: AXValue.self), .cfRange, &selection),
+           selection.location >= 0, selection.length >= 0, selection.location + selection.length <= (old as NSString).length {
+            expectedText = (old as NSString).replacingCharacters(in: NSRange(location: selection.location, length: selection.length), with: text)
+        }
+    }
     if req["replace"] as? Bool == true {
+        expectedText = text
         guard let old = attr(current, "AXValue") as? String else { fail("Cannot safely select this field's contents. Use a supported editable field.") }
         var range = CFRange(location: 0, length: old.utf16.count)
         guard let selection = AXValueCreate(.cfRange, &range),
@@ -291,6 +378,14 @@ case "type":
             }
             event.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
         }
+    }
+    if let expected = expectedText {
+        for _ in 0..<20 {
+            checkFocus()
+            if string(current, "AXValue") == expected { output(["success": true, "verified": true, "message": "The requested text was read back at the target field."]) }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        output(["success": true, "verified": false, "uncertain": true, "message": "Typing was sent, but the final field value could not be verified. Inspect before retrying."])
     }
 case "shortcut":
     var flags: CGEventFlags = []

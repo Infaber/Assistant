@@ -4,10 +4,9 @@ A personal voice assistant built with LiveKit Agents and Google's Gemini Live
 API. Ariana uses `gemini-3.1-flash-live-preview`, the `Achernar` voice, and British
 English. Gemini handles speech input, speech output, and turn detection.
 
-Ariana can search the public web and open, read, and list links on public pages
-using a session-isolated Playwright WebKit browser. It also accepts video input
-when a connected frontend supplies it. Audio enhancement uses the ai-coustics
-plugin with LiveKit Cloud authentication.
+Ariana searches and reads through the real Safari app on the Mac running the
+agent. It also accepts video input when the frontend supplies it. Audio
+enhancement uses ai-coustics with LiveKit Cloud authentication.
 
 ## Setup
 
@@ -19,14 +18,7 @@ later for the debugger commands below.
 git clone https://github.com/Infaber/Assistant.git
 cd Assistant/ariana
 uv sync --locked --dev
-uv run playwright install webkit
-cp .env.example .env.local
-```
-
-On Linux, install WebKit's system dependencies as well:
-
-```sh
-uv run playwright install --with-deps webkit
+cp -n .env.example .env.local
 ```
 
 Fill in `.env.local` with your LiveKit Cloud project's `LIVEKIT_URL`,
@@ -65,31 +57,24 @@ The worker registers as `ariana`; configure your frontend's agent dispatch to
 target that name. A web frontend can start from the
 [LiveKit React starter](https://github.com/livekit-examples/agent-starter-react).
 
-## Browser and search settings
+## Safari and action feedback
+
+Browsing uses Safari Automation, with a fixed read-only page script and an
+Accessibility fallback. Run locally on macOS and allow Automation for Safari and
+Accessibility for your launcher. Safari's Develop → Allow JavaScript from Apple
+Events is optional for fuller page reads. No headless browser is installed in the
+Docker image; Linux reports browsing as unavailable. User-requested local HTTP(S)
+pages are supported, and executable URLs/embedded credentials are rejected.
+
+Tools emit bounded, redacted `ariana.activity` events to the connected room. The
+frontend distinguishes verified outcomes from dispatched inputs and unverified
+legacy results. See the [main README](../README.md#safari-browsing-and-verified-mac-actions)
+for permissions, recovery settings, and verification limits.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ARIANA_BROWSER_HEADLESS` | `0` | Set to `1` on a server without a desktop. |
-| `ARIANA_BROWSER_TIMEOUT_MS` | `15000` | Browser operation timeout. |
-| `ARIANA_BROWSER_MAX_TEXT_LENGTH` | `8000` | Maximum page text returned to the model. |
-| `ARIANA_BROWSER_ALLOWED_HOSTS` | empty | Comma-separated allowed hosts, including their subdomains. |
-| `ARIANA_SEARCH_TIMEOUT_SECONDS` | `15` | How long Ariana waits for a web search. |
-
-The browser starts on the first open/search request. Missing browser binaries
-produce a tool error while the voice session remains available. A visible window
-appears on the **worker's machine**; deploying to a server does not open a browser
-on the user's computer. The Docker image uses headless mode.
-
-Browser tools block local/private addresses, embedded URL credentials, and
-non-HTTP(S) URLs. Service workers are disabled so requests go through the URL
-filter. These checks are defense in depth; use network-level egress restrictions
-when exposing the worker to untrusted users. The browser allowlist applies to
-browser requests, including subresources; it does not restrict the separate web
-search provider. Include `duckduckgo.com` for browser search when using an allowlist.
-
-Search logs record completion or failure without queries or results. The search
-timeout bounds the tool's wait; it does not forcibly stop a provider thread already
-running. Search/browser content is untrusted input, as described in Ariana's prompt.
+| `ARIANA_GOOGLE_MODEL` | `gemini-3.1-flash-live-preview` | Primary Gemini Live model. |
+| `ARIANA_FALLBACK_GOOGLE_MODEL` | empty | Optional compatible backup, attempted once after terminal failure. |
 
 ## Tests and CI
 
@@ -99,9 +84,10 @@ uv run ruff format --check .
 uv run pytest -q
 ```
 
-Tests cover browser lifecycle, navigation errors, URL restrictions, search errors
-and timeouts, and credential validation. They use mocked backends plus a real,
-headless WebKit smoke test; no model API keys are required.
+Tests cover Safari navigation, tab identity, permission errors, URL validation,
+activity redaction, model recovery and Mac snapshots. They use isolated backends;
+no model API keys are required. The opt-in `scripts/check_mac_controls.py` runs
+real Mac input against disposable test windows.
 
 Repository-root `.github/workflows/checks.yml` runs these checks on pull requests
 and pushes to `main`. Dependencies come from the committed `uv.lock`.
@@ -110,6 +96,7 @@ Full conversation scenarios are in `scenarios.yaml`. Run them with:
 
 ```sh
 lk agent simulate text --scenarios scenarios.yaml
+lk agent simulate text --scenarios scenarios-reliability.yaml
 ```
 
 The search-failure and untrusted-page scenarios use deterministic tool fixtures
@@ -140,7 +127,8 @@ docker build -t ariana ./ariana
 docker run --rm --env-file ariana/.env.local ariana
 ```
 
-The image installs WebKit and its native libraries and runs as a non-root user.
+The image runs as a non-root user. Safari and native Mac controls are unavailable
+in the Linux container.
 For managed deployment, see the
 [LiveKit deployment guide](https://docs.livekit.io/deploy/agents/).
 
@@ -229,10 +217,9 @@ before inspecting, clicking, typing, or sending shortcuts.
 
 ## Desktop navigation and preferences
 
-`mac_control` can open web URLs and searches directly in Safari, Chrome, Edge,
-Brave or Firefox. Use “Search Safari for LiveKit voice agents” or “Open
-https://docs.livekit.io in Safari.” These commands open the browser without
-needing to guess an address-bar control; they do not read results automatically.
+Use “Search Safari for LiveKit voice agents” or “Open https://docs.livekit.io in
+Safari.” The Safari tools open and read the requested page. Legacy `mac_control`
+browser navigation also uses Safari, but only confirms dispatch.
 
 Inspection prioritizes the focused field, filters structural noise, includes
 menu commands, and supports a label/text query and output limit. For multiple
@@ -251,8 +238,8 @@ conversation are serialized, and stale targets require a new inspection.
 Ask “Remember my preferred browser is Safari” or “Remember my home city is Oslo.”
 Supported preferences are display name, home city, browser, reply style
 (brief/normal/detailed), and units (metric/imperial). “What do you remember?” reads
-them; “Forget my browser preference” removes that entry. Browser defaults apply to
-browser commands without a named app. Other saved preferences guide the assistant
+them; “Forget my browser preference” removes that entry. Saved browser preferences are retained for compatibility; browsing always uses
+Safari. Other saved preferences guide the assistant
 when recalled; they do not change macOS settings or the voice model.
 
 Preferences are stored locally in

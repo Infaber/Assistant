@@ -22,7 +22,6 @@ jobs:
       LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
       LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-      ARIANA_BROWSER_HEADLESS: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Check required credentials
@@ -41,8 +40,6 @@ jobs:
           python-version: "3.14"
       - name: Install locked dependencies
         run: uv sync --locked
-      - name: Install WebKit and its system dependencies
-        run: uv run playwright install --with-deps webkit
       - name: Download model files
         run: uv run --module livekit.agents download-files
       - name: Install LiveKit CLI
@@ -55,3 +52,5 @@ jobs:
         run: lk agent simulate text --scenarios scenarios-mac.yaml
       - name: Check personal memory
         run: lk agent simulate text --scenarios scenarios-memory.yaml
+      - name: Check Safari and uncertain action recovery
+        run: lk agent simulate text --scenarios scenarios-reliability.yaml
