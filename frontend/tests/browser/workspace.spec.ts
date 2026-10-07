@@ -104,18 +104,32 @@ test("explicit start sends access code, errors stay visible and retry works", as
   await expect.poll(() => headers.length).toBe(2);
 });
 test("cancels an in-flight connection without an error", async ({ page }) => {
+  let releaseRequest!: () => void;
+  const pendingRequest = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  let requestStarted = false;
   await page.route("**/api/connection", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    requestStarted = true;
+    await pendingRequest;
     await route
       .fulfill({ status: 503, json: { error: "Should not appear" } })
       .catch(() => {});
   });
-  await page.goto("/");
-  await page.locator(".orb-touch").click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel connection" }).click();
-  await expect(page.locator(".orb-touch")).toBeEnabled();
-  await expect(page.locator(".error-banner[role=alert]")).toHaveCount(0);
+  try {
+    await page.goto("/");
+    await page.locator(".orb-touch").click();
+    await expect.poll(() => requestStarted).toBe(true);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel connection" }).click();
+    // Let the intercepted request settle after cancellation; routed WebKit
+    // requests do not always observe AbortSignal until the route is released.
+    releaseRequest();
+    await expect(page.locator(".orb-touch")).toBeEnabled();
+    await expect(page.locator(".error-banner[role=alert]")).toHaveCount(0);
+  } finally {
+    releaseRequest();
+  }
 });
 test("global pasted pictures reveal composer, stage files and remove previews", async ({
   page,
