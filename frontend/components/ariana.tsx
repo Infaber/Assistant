@@ -36,6 +36,10 @@ import {
 import ArianaOrb, { orbStyles } from "./ariana-orb";
 import { useThinkingFeedback } from "./use-thinking-feedback";
 
+import {
+  CompanionLifecycle,
+  terminalConnectionError,
+} from "../lib/companion-lifecycle";
 import { desktopConfig } from "../lib/desktop";
 import SharingComposer, { type SharedMessage } from "./sharing-composer";
 import CheckInControls from "./check-in-controls";
@@ -158,7 +162,34 @@ function Workspace({
   const transcript = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
+  const lifecycle = useRef(
+    new CompanionLifecycle(
+      (() => {
+        try {
+          return (
+            !!desktopConfig() &&
+            sessionStorage.getItem("ariana.desktop.paused") === "true"
+          );
+        } catch {
+          return false;
+        }
+      })(),
+    ),
+  );
+  function savePaused(paused: boolean) {
+    if (!desktopConfig()) return;
+    try {
+      sessionStorage.setItem("ariana.desktop.paused", String(paused));
+    } catch {}
+  }
+  const joining = useRef(false);
+  const agentReady = useRef(false);
+  const startLatest = useRef<(asText?: boolean) => Promise<void>>(
+    async () => {},
+  );
+  const wakeUntil = useRef(0);
   const connected = session.isConnected;
+  agentReady.current = connected && agent.isConnected;
   const connecting =
     busy || session.connectionState === ConnectionState.Connecting;
   const reconnecting = [
@@ -309,8 +340,10 @@ function Workspace({
       const event = parseActivity(payload);
       if (!event) return;
       setActivity((rows) => updateActivity(rows, event));
-      if (event.kind === "system" && event.status === "failed")
+      if (event.kind === "system" && event.status === "failed") {
+        lifecycle.current.terminal = terminalConnectionError(event.detail);
         setProviderError(event.detail);
+      }
     };
     const disconnected = (reason?: DisconnectReason) => {
       setActivity(finishActivity);
@@ -351,7 +384,17 @@ function Workspace({
   );
 
   async function start(asText = false) {
-    if (connecting || connected) return;
+    lifecycle.current.paused = false;
+    savePaused(false);
+    if (
+      joining.current ||
+      connecting ||
+      session.room.state === ConnectionState.Connected ||
+      reconnecting
+    )
+      return;
+    joining.current = true;
+    lifecycle.current.connecting = true;
     setBusy(true);
     setError("");
     setProviderError("");
@@ -371,30 +414,193 @@ function Workspace({
       // StartAudio offers a user gesture if the browser blocks autoplay.
       await session.room.startAudio().catch(() => {});
     } catch (err) {
-      if (!controller.signal.aborted) setError(friendlyError(err));
+      if (!controller.signal.aborted) {
+        setError(friendlyError(err));
+        lifecycle.current.terminal = terminalConnectionError(err);
+      }
       await session.end();
     } finally {
+      joining.current = false;
+      lifecycle.current.connecting = false;
       setBusy(false);
     }
   }
+  startLatest.current = start;
 
   useEffect(() => {
     if (!desktopConfig()) return;
     const automaticStart = window.setTimeout(() => {
-      void start(true);
+      if (!lifecycle.current.paused) void startLatest.current(true);
     }, 400);
     const pause = () => {
+      lifecycle.current.paused = true;
+      savePaused(true);
       abort.current?.abort();
       void session.end();
     };
+    const sleep = () => {
+      lifecycle.current.sleeping = true;
+      abort.current?.abort();
+      void session.end();
+    };
+    const offline = () => {
+      lifecycle.current.online = false;
+    };
+    const recover = async () => {
+      savePaused(false);
+      lifecycle.current.resume();
+      abort.current?.abort();
+      await session.end();
+      void startLatest.current(true);
+    };
+    const serviceRecover = async () => {
+      lifecycle.current.sleeping = false;
+      lifecycle.current.online = true;
+      if (
+        lifecycle.current.paused ||
+        lifecycle.current.terminal ||
+        agentReady.current
+      )
+        return;
+      if (
+        [
+          ConnectionState.Reconnecting,
+          ConnectionState.SignalReconnecting,
+        ].includes(session.room.state)
+      )
+        return;
+      if (session.room.state === ConnectionState.Connected) await session.end();
+      void startLatest.current(true);
+    };
+    const wake = async () => {
+      if (
+        joining.current ||
+        lifecycle.current.sleeping ||
+        !lifecycle.current.online
+      )
+        return;
+      savePaused(false);
+      lifecycle.current.resume();
+      wakeUntil.current = Date.now() + 15000;
+      try {
+        if (session.room.state === ConnectionState.Connected)
+          await localParticipant.setMicrophoneEnabled(true);
+        else await startLatest.current(false);
+      } catch (err) {
+        setError(friendlyError(err));
+        lifecycle.current.terminal = true;
+      }
+    };
     window.addEventListener("ariana:pause", pause);
+    window.addEventListener("ariana:sleep", sleep);
+    window.addEventListener("ariana:offline", offline);
+    window.addEventListener("ariana:recover", recover);
+    window.addEventListener("ariana:wake-word", wake);
+    window.addEventListener("ariana:service-recover", serviceRecover);
     return () => {
       window.clearTimeout(automaticStart);
       window.removeEventListener("ariana:pause", pause);
+      window.removeEventListener("ariana:sleep", sleep);
+      window.removeEventListener("ariana:offline", offline);
+      window.removeEventListener("ariana:recover", recover);
+      window.removeEventListener("ariana:wake-word", wake);
+      window.removeEventListener("ariana:service-recover", serviceRecover);
     };
-  }, [session.room]);
+  }, [session.room, localParticipant]);
+
+  useEffect(() => {
+    if (!desktopConfig()) return;
+    if (connected && agent.isConnected) {
+      lifecycle.current.connected();
+      return;
+    }
+    if (connected) {
+      // A crashed worker can leave a healthy room with no Ariana participant.
+      const timer = window.setTimeout(() => {
+        const policy = lifecycle.current;
+        if (
+          !policy.paused &&
+          !policy.sleeping &&
+          policy.online &&
+          !policy.terminal
+        )
+          void session.end();
+      }, 30000);
+      return () => window.clearTimeout(timer);
+    }
+    if (connecting || reconnecting) return;
+    const delay = lifecycle.current.delay();
+    if (delay === null) return;
+    const timer = window.setTimeout(() => {
+      void startLatest.current(true);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [
+    connected,
+    connecting,
+    reconnecting,
+    error,
+    agent.isConnected,
+    agent.state,
+    session.room,
+  ]);
+
+  const desktopState = lifecycle.current.paused
+    ? "paused"
+    : providerError || lifecycle.current.terminal || !lifecycle.current.online
+      ? "offline"
+      : reconnecting
+        ? "recovering"
+        : connecting
+          ? "connecting"
+          : !connected
+            ? "offline"
+            : !agent.isConnected
+              ? "connecting"
+              : agent.state === "speaking"
+                ? "speaking"
+                : agent.state === "thinking"
+                  ? "thinking"
+                  : isMicrophoneEnabled
+                    ? "listening"
+                    : "idle";
+  const outputActive =
+    agent.state === "speaking" || outputLevel > 0.01 || feedbackLevel > 0.01;
+  useEffect(() => {
+    const notify = () =>
+      desktopConfig()?.postMessage?.({
+        type: "state",
+        state: desktopState,
+        microphone: isMicrophoneEnabled,
+        output: outputActive,
+      });
+    notify();
+    window.addEventListener("ariana:heartbeat", notify);
+    return () => window.removeEventListener("ariana:heartbeat", notify);
+  }, [desktopState, isMicrophoneEnabled, outputActive]);
+
+  useEffect(() => {
+    if (!desktopConfig() || !isMicrophoneEnabled || !wakeUntil.current) return;
+    if (
+      inputLevel > 0.06 ||
+      agent.state === "thinking" ||
+      agent.state === "speaking"
+    )
+      wakeUntil.current = Date.now() + 15000;
+    const timer = window.setInterval(() => {
+      if (wakeUntil.current && Date.now() > wakeUntil.current) {
+        wakeUntil.current = 0;
+        void localParticipant
+          .setMicrophoneEnabled(false)
+          .catch((err) => setError(friendlyError(err)));
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [inputLevel, agent.state, isMicrophoneEnabled, localParticipant]);
 
   async function end() {
+    lifecycle.current.paused = true;
+    savePaused(true);
     abort.current?.abort();
     await session.end();
   }

@@ -259,3 +259,56 @@ test("keyboard can activate the orb without the typing shortcut stealing Enter",
   );
   expect(requests).toBe(1);
 });
+
+test("native pause survives sleep/network recovery and repeated wakes join once", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.addInitScript(() => {
+    window.arianaDesktop = { desktop: true, accessCode: "native-test" };
+  });
+  await page.route("**/api/connection", async (route) => {
+    requests++;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await route
+      .fulfill({ status: 503, json: { error: "Network unavailable" } })
+      .catch(() => {});
+  });
+  await page.goto("/");
+  await expect.poll(() => requests).toBe(1);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("ariana:pause"));
+    window.dispatchEvent(new Event("ariana:sleep"));
+    window.dispatchEvent(new Event("ariana:service-recover"));
+  });
+  await page.waitForTimeout(2500);
+  expect(requests).toBe(1);
+  await page.reload();
+  await page.waitForTimeout(700);
+  expect(requests).toBe(1);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("ariana:wake-word"));
+    window.dispatchEvent(new Event("ariana:wake-word"));
+    window.dispatchEvent(new Event("ariana:wake-word"));
+  });
+  await expect.poll(() => requests).toBe(2);
+  await page.evaluate(() => window.dispatchEvent(new Event("ariana:pause")));
+});
+
+test("native auth failure waits for explicit reconnect", async ({ page }) => {
+  let requests = 0;
+  await page.addInitScript(() => {
+    window.arianaDesktop = { desktop: true, accessCode: "native-test" };
+  });
+  await page.route("**/api/connection", async (route) => {
+    requests++;
+    await route.fulfill({
+      status: 401,
+      json: { error: "Enter the correct access code" },
+    });
+  });
+  await page.goto("/");
+  await expect.poll(() => requests).toBe(1);
+  await page.waitForTimeout(2500);
+  expect(requests).toBe(1);
+});
