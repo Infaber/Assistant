@@ -126,14 +126,24 @@ class BrowserToolset(Toolset):
         self._lock = asyncio.Lock()
         self._target: dict = {}
         self._tabs: dict[str, dict] = {}
+        self._permission_failure: dict | None = None
+        self._navigation: tuple[str, str, dict] | None = None
 
     async def _request(self, context, request):
+        if self._permission_failure:
+            return dict(self._permission_failure)
         try:
             state = context.session.userdata
         except (AttributeError, ValueError):
             state = {}
         backend = (state or {}).get("_safari_simulator", _run_safari)
-        return await asyncio.to_thread(backend, request)
+        result = await asyncio.to_thread(backend, request)
+        if result.get("code") == "safari_automation":
+            self._permission_failure = {
+                **result,
+                "message": "Safari access stopped for this session. After granting Automation permission, start a fresh session before retrying.",
+            }
+        return result
 
     async def _read(self, context):
         result = await self._request(context, {"action": "read", **self._target})
@@ -177,6 +187,26 @@ class BrowserToolset(Toolset):
         return result
 
     async def _open(self, context, url):
+        url = validate_url(url)
+        try:
+            users = [
+                item
+                for item in context.session.history.items
+                if getattr(item, "role", None) == "user"
+            ]
+            turn = users[-1].id if users else ""
+        except AttributeError:
+            turn = ""
+        if turn and self._navigation and self._navigation[:2] == (turn, url):
+            prior = self._navigation[2]
+            # A fresh read can verify changes; it must not open a second window.
+            return await self._read(context) if prior.get("verified") else dict(prior)
+        result = await self._open_once(context, url)
+        if turn:
+            self._navigation = (turn, url, dict(result))
+        return result
+
+    async def _open_once(self, context, url):
         result = await self._request(
             context, {"action": "open", "url": validate_url(url)}
         )

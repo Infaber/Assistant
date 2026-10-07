@@ -4,6 +4,7 @@ import asyncio
 import subprocess
 import sys
 import time
+from typing import Literal
 from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
@@ -353,7 +354,21 @@ async def _mac_control_impl(
 @observed("Mac control")
 async def mac_control(
     context: RunContext,
-    action: str,
+    action: Literal[
+        "apps",
+        "open",
+        "inspect",
+        "click",
+        "context_click",
+        "double_click",
+        "type",
+        "shortcut",
+        "scroll",
+        "windows",
+        "focus_window",
+        "browser_search",
+        "browser_open",
+    ],
     app_name: str = "",
     snapshot_id: str = "",
     element_id: str = "",

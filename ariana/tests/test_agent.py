@@ -171,3 +171,31 @@ async def test_browser_fixture_receives_sdk_context_before_url():
     )
     result = await _run_mock(simulation_tools._library_page, *args, **kwargs)
     assert result["verified"] and "09:00" in result["text"]
+
+
+def test_default_live_model_keeps_voice_and_safe_tool_mode(monkeypatch):
+    import model_config
+
+    monkeypatch.delenv("ARIANA_GOOGLE_MODEL", raising=False)
+    factory = Mock(return_value="model")
+    monkeypatch.setattr(model_config.google.realtime, "RealtimeModel", factory)
+    assert model_config.realtime_model("test-key") == "model"
+    assert factory.call_args.kwargs == {
+        "model": "gemini-3.8-live",
+        "voice": "Achernar",
+        "language": "en-GB",
+        "api_key": "test-key",
+        "tool_behavior": model_config.types.Behavior.BLOCKING,
+    }
+
+
+def test_extended_live_is_gated_and_other_models_remain_configurable(monkeypatch):
+    import model_config
+
+    monkeypatch.setenv("ARIANA_GOOGLE_MODEL", model_config.EXTENDED_MODEL)
+    with pytest.raises(ValueError, match="interaction_status"):
+        model_config.realtime_model("test-key")
+    factory = Mock()
+    monkeypatch.setattr(model_config.google.realtime, "RealtimeModel", factory)
+    model_config.realtime_model("test-key", "gemini-3.1-flash-live-preview")
+    assert "tool_behavior" not in factory.call_args.kwargs

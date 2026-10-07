@@ -1,0 +1,12 @@
+# Private local configuration and assistant state anywhere in the checkout
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.ppn
+*.pv
+*.log
+.DS_Store

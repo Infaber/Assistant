@@ -13,41 +13,6 @@ resolution-markers = [
 constraints = [{ name = "yarl", specifier = "<1.24" }]
 
 [[package]]
-name = "agent-starter-python"
-version = "1.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "livekit-agents", extra = ["google", "images"] },
-    { name = "livekit-plugins-ai-coustics" },
-    { name = "pypdf" },
-    { name = "python-dotenv" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "livekit-agents", extras = ["google", "images"], specifier = "~=1.8" },
-    { name = "livekit-plugins-ai-coustics", specifier = "~=0.3" },
-    { name = "pypdf", specifier = ">=6,<7" },
-    { name = "python-dotenv" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[[package]]
 name = "aiofiles"
 version = "25.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -245,6 +210,52 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/d2/f4d173e22df740bc37b1db102b386ba719b66e95b0f0d751f556b387e6d2/anyio-4.15.1.tar.gz", hash = "sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94", size = 276966, upload-time = "2026-09-05T10:42:39.44Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl", hash = "sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101", size = 132079, upload-time = "2026-09-05T10:42:37.923Z" },
+]
+
+[[package]]
+name = "ariana-assistant"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "livekit-agents", extra = ["google", "images"] },
+    { name = "livekit-plugins-ai-coustics" },
+    { name = "livekit-plugins-google" },
+    { name = "pypdf" },
+    { name = "python-dotenv" },
+]
+
+[package.optional-dependencies]
+wake-word = [
+    { name = "pvporcupine" },
+    { name = "pvrecorder" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "livekit-agents", extras = ["google", "images"], specifier = "~=1.8" },
+    { name = "livekit-plugins-ai-coustics", specifier = "~=0.3" },
+    { name = "livekit-plugins-google", specifier = ">=1.8.5,<1.9" },
+    { name = "pvporcupine", marker = "extra == 'wake-word'", specifier = ">=4.0.3,<5" },
+    { name = "pvrecorder", marker = "extra == 'wake-word'", specifier = ">=1.2.7,<2" },
+    { name = "pypdf", specifier = ">=6,<7" },
+    { name = "python-dotenv" },
+]
+provides-extras = ["wake-word"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
 ]
 
 [[package]]
@@ -1215,7 +1226,7 @@ wheels = [
 
 [[package]]
 name = "livekit-agents"
-version = "1.8.4"
+version = "1.8.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1254,9 +1265,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/6a/3ff8140487d10522c7b6297c66419ca98fe8c6326202f2424a2eaed0e1bd/livekit_agents-1.8.4.tar.gz", hash = "sha256:081cd10e80c6691372598d29b79b64cbede504e3c7c45b2bea78589ccbe4e48c", size = 2769979, upload-time = "2026-10-01T22:39:59.035Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7c/aa/e0a6f4f3831dc52c12117b90147cf8e84cdf1b9a0b30c1db83be14ea3b53/livekit_agents-1.8.5.tar.gz", hash = "sha256:89c21aeae76a9d8c9c5e1d5e358c0f1faaf6c8b46329012a7e197438392eeda0", size = 2776437, upload-time = "2026-10-06T01:40:11.636Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/93/da4637cb0c1bf963c79c7f4db24807c713045b171cee6a808b4256ca5067/livekit_agents-1.8.4-py3-none-any.whl", hash = "sha256:7687725b7db313bcc8461fe88b0ac960845cb1b56629c5d3c6cca3d6edcce108", size = 2894978, upload-time = "2026-10-01T22:39:56.999Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/37/9f68b97015998423075c9a882e943ae49f570a4fe2f5d266bb20e4e34cff/livekit_agents-1.8.5-py3-none-any.whl", hash = "sha256:e53345db9cb8a06c4988aa8bdfedc6acec6ea415c4155376bd9896dc6633a3c4", size = 2902206, upload-time = "2026-10-06T01:40:09.143Z" },
 ]
 
 [package.optional-dependencies]
@@ -1371,7 +1382,7 @@ wheels = [
 
 [[package]]
 name = "livekit-plugins-google"
-version = "1.8.4"
+version = "1.8.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-auth" },
@@ -1380,9 +1391,9 @@ dependencies = [
     { name = "google-genai" },
     { name = "livekit-agents" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/52/157fb181173a1a29bab41552e2b07f324f8b438e8f24a2f357012d499b0c/livekit_plugins_google-1.8.4.tar.gz", hash = "sha256:580b4372b17a8ea256ad92680346f40421a9d1dff888250764ed808dc3d0fa64", size = 59936, upload-time = "2026-10-01T22:40:45.341Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c3/75/73031b7dbcedda9ade685670857882003ab448bc96d7a2d80325c2a6532b/livekit_plugins_google-1.8.5.tar.gz", hash = "sha256:75f59d247592632a9d4a2d9de27895e37a2370df514746bdd23f6751b1898be5", size = 60506, upload-time = "2026-10-06T01:40:50.249Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/e8/d25fe494abde393910e53e270add763adfb57203f7992691cc1df8eeb850/livekit_plugins_google-1.8.4-py3-none-any.whl", hash = "sha256:61f754a8b99bafc1d83a1f8bf444525652adf04eccd058e5cfb739a3c2f00e4f", size = 68326, upload-time = "2026-10-01T22:40:43.651Z" },
+    { url = "https://files.pythonhosted.org/packages/66/86/ef4f308f516d7d0df311680828c3a530db1a84a2094ff39c2109e61f80aa/livekit_plugins_google-1.8.5-py3-none-any.whl", hash = "sha256:8049b8ccb67dc2a014b5d14ee288f0d06c063927b69ae14993a397328d929d19", size = 68913, upload-time = "2026-10-06T01:40:48.866Z" },
 ]
 
 [[package]]
@@ -2164,6 +2175,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/04/78/0acd37ca84ce3ddffaa92ef0f571e073faa6d8ff1f0559ab1272188ea2be/psutil-7.2.2-cp36-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b58fabe35e80b264a4e3bb23e6b96f9e45a3df7fb7eed419ac0e5947c61e47cc", size = 148266, upload-time = "2026-01-28T18:15:31.597Z" },
     { url = "https://files.pythonhosted.org/packages/b4/90/e2159492b5426be0c1fef7acba807a03511f97c5f86b3caeda6ad92351a7/psutil-7.2.2-cp37-abi3-win_amd64.whl", hash = "sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988", size = 137737, upload-time = "2026-01-28T18:15:33.849Z" },
     { url = "https://files.pythonhosted.org/packages/8c/c7/7bb2e321574b10df20cbde462a94e2b71d05f9bbda251ef27d104668306a/psutil-7.2.2-cp37-abi3-win_arm64.whl", hash = "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee", size = 134617, upload-time = "2026-01-28T18:15:36.514Z" },
+]
+
+[[package]]
+name = "pvporcupine"
+version = "4.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/37/db209e19c4e1d931d1752bdf05c763f119271bb79661d482bdf5f564f662/pvporcupine-4.0.3.tar.gz", hash = "sha256:87d0e4d743a13c3a15b1fb34a9ced66e14bb1125ae079f2e2c09423364a68386", size = 3643620, upload-time = "2026-06-25T21:58:11.366Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/ef/1c4b8e47d8248fe1b615772028265ca65d9ff3ea98022d84cd973d46db87/pvporcupine-4.0.3-py3-none-any.whl", hash = "sha256:92796dbd3cf80a56db1ce20702cbceb151aee34f19ef730591f815eb16f2ebfb", size = 3659883, upload-time = "2026-06-25T21:58:08.805Z" },
+]
+
+[[package]]
+name = "pvrecorder"
+version = "1.2.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7b/93/972f2500bca8e2b7807f2c6232504df4f1b82db546e42fdd2de109b98032/pvrecorder-1.2.7.tar.gz", hash = "sha256:f60b2174bff317c4349a916f59b5e71914a120f8313a9458f9ee25b89a800c75", size = 4128384, upload-time = "2025-03-28T20:53:21.841Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f6/4c/b1706065a9b52efa9a23e3822076b8916de2ff26036b6ff1474d90f95c95/pvrecorder-1.2.7-py3-none-any.whl", hash = "sha256:72c44be78069be92a602b0dfad42fbdc62b536f47c151e62076ee49ba877dfb0", size = 4131531, upload-time = "2025-03-28T20:53:19.662Z" },
 ]
 
 [[package]]

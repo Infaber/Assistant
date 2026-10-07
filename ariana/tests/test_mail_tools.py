@@ -53,7 +53,7 @@ async def test_mail_send_requires_confirmation(monkeypatch) -> None:
 
     result = await call_send("alex@example.com", "Hello", "Hi there")
 
-    assert "Please confirm" in result
+    assert "No active conversation" in result
     assert not called
 
 
@@ -77,3 +77,15 @@ async def test_mail_send_runs_after_confirmation(monkeypatch) -> None:
 
     assert result == "Email sent."
     assert captured["arguments"] == ["alex@example.com", "Hello", "Hi there"]
+
+
+@pytest.fixture(autouse=True)
+def approval_for_confirmed_script_tests(monkeypatch):
+    original = tools.write_approval
+    monkeypatch.setattr(
+        tools,
+        "write_approval",
+        lambda context, action, payload, confirmed: (
+            None if confirmed else original(context, action, payload, confirmed)
+        ),
+    )

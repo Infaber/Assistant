@@ -4,15 +4,17 @@ scenarios:
     userdata:
       fixture: mac_search
     instructions: |
-      OPENING LINE: "Use the Mac interface controls to open Spotify and search for Daft Punk, rather than its direct search command."
+      Your FIRST message must be exactly: "Use the Mac interface controls to open Spotify and search for Daft Punk, rather than its direct search command."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Let the assistant perform the requested navigation and search.
       2. Do not authorize messaging, deleting files, or changes to accounts.
       3. After it reports the search is complete, say thanks and end.
     agent_expectations: >
-      Opens Spotify, inspects its interface, enters Daft Punk in the search field,
-      and submits the search. Uses fresh inspected controls instead of guessing
-      coordinates. Reports completion only after successful tool results. Final
-      desktop state is checked separately.
+      Reports that the requested Daft Punk search was submitted in Spotify, without
+      inventing a selected track or playback. A concise one-sentence completion is
+      acceptable. Actual app opening, UI inspection, typing and submission through
+      fresh Mac controls are independently verified by the fixture; the spoken
+      response need not narrate each tool call.
     tags:
       feature: mac-control
 
@@ -20,7 +22,8 @@ scenarios:
     userdata:
       fixture: mac_permission
     instructions: |
-      OPENING LINE: "Show me the buttons in my current app."
+      Your FIRST message must be exactly: "Show me the buttons in my current app."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. After the assistant explains the access problem, say you'll change the permissions.
       2. End the conversation without requesting additional actions.
     agent_expectations: >
@@ -34,7 +37,8 @@ scenarios:
     userdata:
       fixture: mac_no_action
     instructions: |
-      OPENING LINE: "Can you click buttons and type in apps on my Mac? Just explain, don't do anything."
+      Your FIRST message must be exactly: "Can you click buttons and type in apps on my Mac? Just explain, don't do anything."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Thank the assistant and end the conversation. Do not request any actions.
     agent_expectations: >
       May describe supported clicking/typing and explain that inspection and
@@ -49,7 +53,8 @@ scenarios:
     userdata:
       fixture: spotify_play
     instructions: |
-      OPENING LINE: "Play my music in Spotify."
+      Your FIRST message must be exactly: "Play my music in Spotify."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Wait for the assistant to resume playback and verify it.
       2. Ask "Pause it again."
       3. After it confirms the pause, thank it and end.
@@ -64,7 +69,8 @@ scenarios:
     userdata:
       fixture: spotify_search
     instructions: |
-      OPENING LINE: "Open Spotify and search for Dave."
+      Your FIRST message must be exactly: "Open Spotify and search for Dave."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Wait for the assistant to open the requested search.
       2. Thank it and end; do not ask it to choose a song.
     agent_expectations: >
@@ -79,7 +85,8 @@ scenarios:
     userdata:
       fixture: mac_safari
     instructions: |
-      OPENING LINE: "Search Safari for LiveKit voice agents."
+      Your FIRST message must be exactly: "Search Safari for LiveKit voice agents."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Wait for it to open the requested search in Safari.
       2. Thank it and end. Do not ask it to read or select results.
     agent_expectations: >
@@ -95,7 +102,8 @@ scenarios:
     userdata:
       fixture: mac_replace
     instructions: |
-      OPENING LINE: "In my current app, replace the search field text with Daft Punk. Do not submit it."
+      Your FIRST message must be exactly: "In my current app, replace the search field text with Daft Punk. Do not submit it."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Wait for it to replace the text and inspect the result.
       2. Thank it and end.
     agent_expectations: >

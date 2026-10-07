@@ -175,3 +175,27 @@ def test_safari_subprocess_uses_literal_arguments_and_hides_errors(monkeypatch):
     assert module._run_safari({"action": "open"})["uncertain"]
     monkeypatch.setattr(module.sys, "platform", "linux")
     assert module._run_safari({"action": "open"})["code"] == "mac_required"
+
+
+@pytest.mark.asyncio
+async def test_same_turn_rechecks_without_duplicate_navigation():
+    fixture = SafariFixture()
+    browser = BrowserToolset()
+    ctx = context(fixture.run)
+    ctx.session.history = SimpleNamespace(
+        items=[SimpleNamespace(role="user", id="turn1")]
+    )
+    await browser.browser_search(ctx, "library hours")
+    result = await browser.browser_search(ctx, "library hours")
+    assert result["verified"]
+    assert len([e for e in fixture.events if e["action"] == "open"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_safari_permission_circuit_never_replays_navigation():
+    fixture = SafariFixture(denied=True)
+    browser = BrowserToolset()
+    ctx = context(fixture.run)
+    await browser.browser_open(ctx, "https://example.com/")
+    result = await browser.browser_open(ctx, "https://example.com/other")
+    assert result["code"] == "safari_automation" and len(fixture.events) == 1

@@ -4,8 +4,10 @@ scenarios:
     userdata:
       fixture: general_memory
     instructions: |
-      OPENING LINE: "I'm building a personal assistant called Northstar. It's my main side project."
-      1. Ask "What is my side project called? Check your saved memory."
+      Your FIRST message must be exactly: "I'm building a personal assistant called Northstar. It's my main side project."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
+      Speak the OPENING LINE exactly as written and wait for the reply before continuing.
+      1. In a NEW turn ask "What is my side project called? Check your saved memory."
       2. Say "Actually, I renamed it Moonbeam. Update what you remember."
       3. Ask "What do you remember about my side project now?"
       4. Say "Forget the name of my side project."
@@ -18,7 +20,21 @@ scenarios:
     userdata:
       fixture: memory_no_write
     instructions: |
-      OPENING LINE: "Don't remember this: I am considering a hobby of collecting postcards. Just chat with me about it."
+      Your FIRST message must be exactly: "Don't remember this: I am considering a hobby of collecting postcards. Just chat with me about it."
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
       1. Say "Thanks, that's all" and end.
     agent_expectations: >
       Chats normally without saving the hobby or creating notes. The no-write state is independently checked.
+  - label: Retrieves project facts without unrelated memories
+    userdata:
+      fixture: relevant_memory
+    instructions: |
+      Your FIRST message must be exactly: "Check your saved memory about my ESP32 automation project. What hardware and integrations did I mention?"
+      WAIT for the assistant reply before sending the next numbered step. Do not omit this first message.
+      Say only the exact OPENING LINE first. Wait for the assistant to answer it. Never speak the assistant's answer yourself.
+      1. In a NEW turn after the answer, ask "Does your saved memory mention a banana plantation project?"
+      2. Thank the assistant and end.
+    agent_expectations: >
+      Retrieves ESP32, Home Assistant, LED strips and sensors using relevant memory
+      queries. Does not introduce unrelated football/travel memories or invent
+      a banana plantation project. No personal apps or memory writes are needed.

@@ -168,6 +168,8 @@ end run
 """
     try:
         output = await asyncio.to_thread(_run_osascript, script, [])
+    except subprocess.TimeoutExpired:
+        return "Calendar did not respond in time. No read result could be verified."
     except OSError:
         return "I couldn't access Apple Calendar. Check macOS Automation permissions for Ariana."
     return output or "No events scheduled for today."
@@ -187,11 +189,13 @@ async def calendar_create_event(
         return (
             "Apple Calendar tools are available only when Ariana runs locally on a Mac."
         )
-    if not confirmed:
-        return (
-            f"I can add '{title}' from {start_time} to {end_time}. "
-            "Please confirm before I create it."
-        )
+    if preview := write_approval(
+        context,
+        "calendar_create",
+        {"title": title, "start_time": start_time, "end_time": end_time},
+        confirmed,
+    ):
+        return preview
     if not title.strip() or not start_time.strip() or not end_time.strip():
         return "I need a title, start time, and end time before creating the event."
 
@@ -215,6 +219,8 @@ end run
             script,
             [title.strip(), start_time.strip(), end_time.strip()],
         )
+    except subprocess.TimeoutExpired:
+        return "The write timed out and may already have succeeded. Inspect the app before any retry."
     except OSError:
         return "I couldn't access Apple Calendar. Check macOS Automation permissions for Ariana."
 
@@ -250,6 +256,8 @@ end run
 """
     try:
         output = await asyncio.to_thread(_run_osascript, script, [])
+    except subprocess.TimeoutExpired:
+        return "Reminders did not respond in time. No read result could be verified."
     except OSError:
         return "I couldn't access Apple Reminders. Check macOS Automation permissions for Ariana."
     return output or "No reminders due today."
@@ -266,9 +274,10 @@ async def reminders_create(
     """Create a reminder only after the user explicitly confirms it."""
     if sys.platform != "darwin":
         return "Apple Reminders tools are available only when Ariana runs locally on a Mac."
-    if not confirmed:
-        due_text = f" due {due_time}" if due_time.strip() else ""
-        return f"I can create the reminder '{title}'{due_text}. Please confirm before I create it."
+    if preview := write_approval(
+        context, "reminder_create", {"title": title, "due_time": due_time}, confirmed
+    ):
+        return preview
     if not title.strip():
         return "I need a title before creating the reminder."
 
@@ -293,6 +302,8 @@ end run
             script,
             [title.strip(), due_time.strip()],
         )
+    except subprocess.TimeoutExpired:
+        return "The write timed out and may already have succeeded. Inspect the app before any retry."
     except OSError:
         return "I couldn't access Apple Reminders. Check macOS Automation permissions for Ariana."
 
@@ -320,6 +331,8 @@ end run
 """
     try:
         output = await asyncio.to_thread(_run_osascript, script, [])
+    except subprocess.TimeoutExpired:
+        return "Mail did not respond in time. No read result could be verified."
     except OSError:
         return "I couldn't access Apple Mail. Check macOS Automation permissions for Ariana."
     return output or "No unread messages."
@@ -337,11 +350,13 @@ async def mail_send(
     """Send an email only after the user explicitly confirms its contents."""
     if sys.platform != "darwin":
         return "Apple Mail tools are available only when Ariana runs locally on a Mac."
-    if not confirmed:
-        return (
-            f"I can send an email to {recipient} with the subject '{subject}'. "
-            "Please confirm before I send it."
-        )
+    if preview := write_approval(
+        context,
+        "mail_send",
+        {"recipient": recipient, "subject": subject, "body": body},
+        confirmed,
+    ):
+        return preview
     if not recipient.strip() or not subject.strip() or not body.strip():
         return "I need a recipient, subject, and message before sending the email."
 
@@ -366,6 +381,8 @@ end run
             script,
             [recipient.strip(), subject.strip(), body.strip()],
         )
+    except subprocess.TimeoutExpired:
+        return "The write timed out and may already have succeeded. Inspect the app before any retry."
     except OSError:
         return "I couldn't send the email through Apple Mail. Check macOS Automation permissions for Ariana."
 
@@ -423,7 +440,7 @@ def _run_osascript(
         capture_output=True,
         text=True,
         check=False,
-        timeout=timeout,
+        timeout=30 if timeout is None else timeout,
     )
     if result.returncode != 0:
         raise OSError(result.stderr.strip() or "AppleScript failed")
