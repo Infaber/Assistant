@@ -1,8 +1,9 @@
 # Ariana frontend
 
-A futuristic command-centre frontend for the existing `ariana` LiveKit agent. It includes
-voice and text input, a live transcript, audio visualization, microphone controls,
-optional screen sharing, file/picture attachments, optional check-ins, transcript copying, and connection/error feedback.
+A minimal interface centered on Ariana: one animated blue orb on a pure black
+background. Six swappable inner visuals, real microphone/speech levels, optional
+captions and brief spoken feedback during longer thinking turns. File sharing,
+conversation history, screen sharing and background check-ins remain available.
 
 ## Run locally
 
@@ -36,15 +37,18 @@ Then, from `frontend/`:
 npm run dev
 ```
 
-Open <http://127.0.0.1:3000>. Choose **Voice** or **Text**, then **Start conversation**.
-Voice mode requests microphone permission. Text mode starts without a microphone
-and still plays Ariana's spoken replies. Suggestion buttons draft a message; press
-Send after connecting. Screen sharing asks the browser which screen/window/tab
-to share; it does not share system audio. **End session** stops local media.
+Open <http://127.0.0.1:3000>. Tap the orb to start a voice conversation. The tiny
+microphone button toggles voice input; text connections also play spoken replies.
+Tap the orb while connected, type a character, or press `⌘K` / `Ctrl+K` to reveal
+the message pill. Escape hides it. Sending hides it after acceptance. Paste or
+drop files anywhere, or use the paperclip in the pill.
 
-If `ARIANA_ACCESS_CODE` is configured, enter it using the settings icon in the
-left sidebar before connecting. The page keeps it only in memory. No LiveKit
-credentials should be entered into the UI.
+The settings icon opens appearance, optional captions, spoken thinking feedback,
+connection controls, screen sharing, check-ins, and conversation/activity history.
+Use **Connect with text** to start with the microphone off. **End session** stops
+local media. Screen sharing asks which screen/window/tab to share, without system
+audio. If an access code is configured, save it in Settings before connecting.
+The code stays in page memory; LiveKit credentials belong on the server.
 
 You can inspect the design without credentials. Starting a conversation will show
 a setup error until credentials and the agent are ready. There are no simulated
@@ -85,7 +89,7 @@ npm run test:browser
 ```
 
 On Linux, use `npx playwright install --with-deps webkit`. CI runs all these checks
-without LiveKit or model credentials. Browser tests cover layout, draft prompts,
+without LiveKit or model credentials. Browser tests cover orb preferences, keyboard input, attachments, audio assets,
 access-code submission, error recovery, and cancellation. Token tests verify
 authentication, origin checks, room isolation, dispatch, and signed token grants.
 
@@ -97,11 +101,25 @@ do not validate live audio, model responses, or screen interpretation.
 Built with [LiveKit's React frontend APIs](https://docs.livekit.io/frontends/)
 and [server-issued session tokens](https://docs.livekit.io/frontends/build/authentication/endpoint/).
 
-## Command centre
+## Orb and spoken feedback
 
-The procedural particle globe reacts to Ariana’s actual audio level; connecting/thinking uses amber, and errors use red. The session panel displays real connection, microphone, screen-sharing and message state. Decorative rings are not performance gauges.
+Choose flowing mesh, glass bubble, crystal burst, shard vortex, wireframe globe,
+or particle swirl in Settings. Appearance, captions and feedback preferences stay
+in local browser storage. Captions default off. The canvas uses procedural Canvas2D
+with a capped pixel ratio; it pauses in hidden tabs and respects reduced motion.
+The visible orb is approximately 55% of the shorter viewport dimension.
 
-Capability shortcuts and quick-start buttons draft requests without sending them. Use the expand button for focus mode; `⌘K` on Mac or `Ctrl+K` returns to the command input. Animations respect reduced-motion settings, and the canvas stops drawing in background tabs. The UI works without external fonts, images or additional rendering libraries.
+Idle slowly breathes and rotates. Listening tightens the ring and reacts to the
+microphone; thinking adds turbulence; speaking follows Ariana's output volume.
+State changes ease over several hundred milliseconds, and style changes crossfade.
+
+After 1.8 seconds of actual thinking, a short prerecorded acknowledgment in Ariana's
+Achernar voice plays. A second cue can play after 15 seconds. Cues stop when Ariana
+answers, you begin speaking, or feedback is disabled; a cooldown prevents repeated
+acknowledgments between quick tool calls. They are generic status cues, not narrated
+reasoning. Browser autoplay permissions apply. The voice assets are bundled locally,
+so playback adds no provider request. To regenerate them with your existing Google
+key: `cd ariana && uv run python ../frontend/scripts/generate-feedback.py`.
 
 ## Sharing files and optional check-ins
 
