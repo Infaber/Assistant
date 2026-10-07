@@ -104,18 +104,32 @@ test("explicit start sends access code, errors stay visible and retry works", as
   await expect.poll(() => headers.length).toBe(2);
 });
 test("cancels an in-flight connection without an error", async ({ page }) => {
+  let releaseRequest!: () => void;
+  const pendingRequest = new Promise<void>((resolve) => {
+    releaseRequest = resolve;
+  });
+  let requestStarted = false;
   await page.route("**/api/connection", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    requestStarted = true;
+    await pendingRequest;
     await route
       .fulfill({ status: 503, json: { error: "Should not appear" } })
       .catch(() => {});
   });
-  await page.goto("/");
-  await page.locator(".orb-touch").click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel connection" }).click();
-  await expect(page.locator(".orb-touch")).toBeEnabled();
-  await expect(page.locator(".error-banner[role=alert]")).toHaveCount(0);
+  try {
+    await page.goto("/");
+    await page.locator(".orb-touch").click();
+    await expect.poll(() => requestStarted).toBe(true);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel connection" }).click();
+    // Let the intercepted request settle after cancellation; routed WebKit
+    // requests do not always observe AbortSignal until the route is released.
+    releaseRequest();
+    await expect(page.locator(".orb-touch")).toBeEnabled();
+    await expect(page.locator(".error-banner[role=alert]")).toHaveCount(0);
+  } finally {
+    releaseRequest();
+  }
 });
 test("global pasted pictures reveal composer, stage files and remove previews", async ({
   page,
@@ -257,5 +271,58 @@ test("keyboard can activate the orb without the typing shortcut stealing Enter",
   await expect(page.locator(".error-banner")).toContainText(
     "Keyboard connection test",
   );
+  expect(requests).toBe(1);
+});
+
+test("native pause survives sleep/network recovery and repeated wakes join once", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.addInitScript(() => {
+    window.arianaDesktop = { desktop: true, accessCode: "native-test" };
+  });
+  await page.route("**/api/connection", async (route) => {
+    requests++;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await route
+      .fulfill({ status: 503, json: { error: "Network unavailable" } })
+      .catch(() => {});
+  });
+  await page.goto("/");
+  await expect.poll(() => requests).toBe(1);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("ariana:pause"));
+    window.dispatchEvent(new Event("ariana:sleep"));
+    window.dispatchEvent(new Event("ariana:service-recover"));
+  });
+  await page.waitForTimeout(2500);
+  expect(requests).toBe(1);
+  await page.reload();
+  await page.waitForTimeout(700);
+  expect(requests).toBe(1);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("ariana:wake-word"));
+    window.dispatchEvent(new Event("ariana:wake-word"));
+    window.dispatchEvent(new Event("ariana:wake-word"));
+  });
+  await expect.poll(() => requests).toBe(2);
+  await page.evaluate(() => window.dispatchEvent(new Event("ariana:pause")));
+});
+
+test("native auth failure waits for explicit reconnect", async ({ page }) => {
+  let requests = 0;
+  await page.addInitScript(() => {
+    window.arianaDesktop = { desktop: true, accessCode: "native-test" };
+  });
+  await page.route("**/api/connection", async (route) => {
+    requests++;
+    await route.fulfill({
+      status: 401,
+      json: { error: "Enter the correct access code" },
+    });
+  });
+  await page.goto("/");
+  await expect.poll(() => requests).toBe(1);
+  await page.waitForTimeout(2500);
   expect(requests).toBe(1);
 });

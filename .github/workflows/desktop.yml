@@ -14,4 +14,12 @@ jobs:
       - name: Validate installer
         run: bash -n desktop/install.sh
       - name: Compile the native menu bar companion
-        run: swiftc -parse-as-library desktop/Ariana.swift -o /tmp/Ariana-check -framework Cocoa -framework WebKit
+        run: swiftc -parse-as-library desktop/Ariana.swift desktop/CompanionState.swift desktop/ManagedService.swift -o /tmp/Ariana-check -framework Cocoa -framework WebKit -framework Network -framework ServiceManagement -framework AVFoundation
+
+      - name: Run companion state regressions
+        run: swiftc -parse-as-library desktop/CompanionState.swift desktop/CompanionStateTests.swift -o /tmp/Ariana-state-tests && /tmp/Ariana-state-tests
+
+      - name: Check service crash recovery with isolated processes
+        run: |
+          swiftc -parse-as-library desktop/CompanionState.swift desktop/ManagedService.swift desktop/ManagedServiceTests.swift -o /tmp/Ariana-service-tests
+          /tmp/Ariana-service-tests "$(command -v python3)" "$PWD/ariana/src/service_runner.py"

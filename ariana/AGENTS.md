@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This is a LiveKit Agents project. LiveKit Agents is a Python SDK for building voice AI agents. This starter is designed to run in LiveKit Cloud. See @README.md for more about the rest of the LiveKit ecosystem.
+This is a LiveKit Agents project. LiveKit Agents is a Python SDK for building voice AI agents. Ariana runs locally for Mac integrations and can use LiveKit Cloud for rooms. See @README.md for more about the rest of the LiveKit ecosystem.
 
 ## Tooling
 

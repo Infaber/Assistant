@@ -8,6 +8,8 @@ import time
 from contextlib import suppress
 from uuid import uuid4
 
+from task_ledger import action_fingerprint, is_write, ledger_for
+
 TOPIC = "ariana.activity"
 
 
@@ -29,6 +31,11 @@ def result_state(result):
                 "uncertain",
                 "The page opened, but its contents could not be verified.",
             )
+    if isinstance(result, str):
+        if "may already" in result or "may have succeeded" in result:
+            return "uncertain", "The result needs checking before another action."
+        if result.startswith("Nothing saved.") or "NEW user reply" in result:
+            return "approval", "Waiting for your approval."
     # Legacy tools return plain text. Do not convert an arbitrary string into success.
     return "returned", "A result was returned; see Ariana's response."
 
@@ -53,6 +60,29 @@ def observed(label):
         async def run(*args, **kwargs):
             context = signature.bind_partial(*args, **kwargs).arguments.get("context")
             event = {"id": uuid4().hex, "label": label, "kind": "action"}
+            bound = signature.bind_partial(*args, **kwargs)
+            bound.apply_defaults()
+            ledger = ledger_for(context)
+            receipt = None
+            if ledger:
+                fingerprint = action_fingerprint(function.__name__, bound.arguments)
+                write = is_write(function.__name__, bound.arguments)
+                previous = (
+                    ledger.previous_write(fingerprint)
+                    if write and function.__name__ != "mac_control"
+                    else None
+                )
+                if previous:
+                    return {
+                        "error": "This action was already dispatched in this session. Inspect/read the actual state; do not repeat completed work or uncertain writes.",
+                        "uncertain": previous.status != "verified",
+                        "action_id": previous.id,
+                        "previous_status": previous.status,
+                    }
+                try:
+                    receipt = ledger.begin(event["id"], label, fingerprint, write)
+                except ValueError as error:
+                    return {"error": str(error)}
             await emit(
                 context,
                 {**event, "status": "running", "detail": "Working on your request."},
@@ -60,6 +90,8 @@ def observed(label):
             try:
                 result = await function(*args, **kwargs)
             except asyncio.CancelledError:
+                if receipt:
+                    receipt.status = "uncertain"
                 await emit(
                     context,
                     {
@@ -70,16 +102,24 @@ def observed(label):
                 )
                 raise
             except Exception:
+                if receipt:
+                    receipt.status = "uncertain" if receipt.write else "failed"
                 await emit(
                     context,
                     {
                         **event,
-                        "status": "failed",
-                        "detail": "The tool could not complete this request.",
+                        "status": "uncertain"
+                        if receipt and receipt.write
+                        else "failed",
+                        "detail": "An action may have completed; inspect before retrying."
+                        if receipt and receipt.write
+                        else "The tool could not complete this request.",
                     },
                 )
                 raise
             status, detail = result_state(result)
+            if receipt:
+                receipt.status = status
             await emit(context, {**event, "status": status, "detail": detail})
             return result
 

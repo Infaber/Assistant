@@ -3,6 +3,8 @@
 import os
 from uuid import uuid4
 
+from model_config import configured_model
+
 
 def describe_failure(error):
     # Classify provider errors, not user intent. Never publish raw provider payloads.
@@ -47,9 +49,7 @@ def install_recovery(session, publisher, make_agent):
             )
             return
         backup = os.getenv("ARIANA_FALLBACK_GOOGLE_MODEL", "").strip()
-        primary = os.getenv(
-            "ARIANA_GOOGLE_MODEL", "gemini-3.1-flash-live-preview"
-        ).strip()
+        primary = configured_model()
         if (
             backup
             and backup != primary

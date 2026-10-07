@@ -1,9 +1,10 @@
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 
-from memory_tools import MemoryStore, memory_context
+from memory_tools import MemoryStore, memory_context, memory_manage
 
 
 def test_persists_corrects_and_forgets(tmp_path):
@@ -111,3 +112,50 @@ def test_startup_loads_bounded_context_from_disk(tmp_path, monkeypatch):
     assert data["total_memories"] == 25
     assert len(data["memories"]) == 20
     assert data["preferences"] == {"display_name": "QA"}
+
+
+def test_relevant_local_retrieval_omits_unrelated_and_corrects(tmp_path):
+    store = MemoryStore(tmp_path / "relevant.db")
+    for topic, fact in [
+        ("esp32", "Building an ESP32 controller"),
+        ("lighting", "LED strips connected to Home Assistant"),
+        ("sensors", "Temperature sensors for automation"),
+        ("sports", "Enjoys football"),
+        ("holiday", "Visited Italy"),
+    ]:
+        store.run({"action": "remember", "topic": topic, "fact": fact})
+    result = store.run({"action": "recall", "query": "my ESP32 project"})["memories"]
+    assert result[0]["topic"] == "esp32"
+    assert {item["topic"] for item in result} == {"esp32", "lighting", "sensors"}
+    assert store.run({"action": "recall", "query": "bananas"})["memories"] == []
+    assert (
+        store.run({"action": "recall", "query": "what do you remember about me"})[
+            "memories"
+        ]
+        == []
+    )
+    store.run(
+        {"action": "remember", "topic": "esp32", "fact": "ESP32 prototype finished"}
+    )
+    assert (
+        store.run({"action": "recall", "query": "esp32"})["memories"][0]["fact"]
+        == "ESP32 prototype finished"
+    )
+
+
+def test_unlabelled_credentials_are_rejected(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite3")
+    with pytest.raises(ValueError, match="credentials"):
+        store.run({"action": "remember", "topic": "misc", "fact": "AIza" + "x" * 35})
+
+
+@pytest.mark.asyncio
+async def test_invalid_memory_protocol_cannot_fake_success():
+    called = []
+    ctx = SimpleNamespace(
+        session=SimpleNamespace(
+            userdata={"_memory_simulator": lambda request: called.append(request)}
+        )
+    )
+    result = await memory_manage._func(ctx, "save", "project", "Northstar")
+    assert result["error"] and called == []

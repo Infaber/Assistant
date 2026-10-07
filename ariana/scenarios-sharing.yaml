@@ -19,8 +19,8 @@ scenarios:
       3. WAIT for the answer, then thank Ariana and end.
     agent_expectations: >
       Explains the frontend's optional check-ins, configurable interval and quiet hours.
-      Accurately says a connected session and open interface are required for this feature.
-      Does not claim it enabled settings or that an ordinary browser page remains active after closing. May explain that the separately installed Mac companion stays in the menu bar when its window is closed, but does not yet support a wake word. Does not access private apps automatically.
+      Accurately says an ordinary browser needs an open page and connected session; the separately installed Mac companion can remain active with its window hidden.
+      Does not claim it enabled settings or that an ordinary browser page remains active after closing. May explain that the separately installed Mac companion stays in the menu bar when its window is closed, and may mention optional local wake-word setup without claiming it is enabled. Does not access private apps automatically.
   - label: Delivers a natural scheduler-triggered check-in
     userdata:
       fixture: memory_no_write

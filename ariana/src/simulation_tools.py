@@ -12,7 +12,9 @@ from livekit.agents import (
 )
 from livekit.agents.llm import ToolError
 
+from action_events import observed
 from mac_simulation import DesktopFixture, SpotifyFixture
+from memory_retrieval import relevant_memories
 from notes_tools import write_approval
 
 LIBRARY_URL = "https://example.com/library"
@@ -50,10 +52,55 @@ def configure_simulation_tools(
             "reminders_create",
             "mail_send",
             "home_assistant_request",
+            "calendar_today",
+            "reminders_today",
+            "mail_unread",
+            "notes_list",
+            "notes_read",
         ),
         _blocked_write,
     )
-    if fixture in {"safari_search", "safari_denied", "public_page"}:
+    if fixture == "relevant_memory":
+        facts = [
+            ("esp32", "Building an ESP32 automation project"),
+            ("home assistant", "Home Assistant controls LED strips and sensors"),
+            ("football", "Enjoys football"),
+            ("travel", "Planning an Italy holiday"),
+        ]
+
+        def memory(request):
+            if request["action"] != "recall":
+                return {"error": "Read-only fixture"}
+            return {
+                "memories": relevant_memories(
+                    facts, request.get("query") or request.get("topic") or ""
+                )
+            }
+
+        session.userdata = {"_memory_simulator": memory}
+        mocks.pop("memory_manage")
+    elif fixture == "partial_notes":
+        safari = SafariFixture()
+        session.userdata = {
+            "_safari_simulator": safari.run,
+            "safari": safari,
+            "writes": [],
+        }
+
+        @observed("Create note")
+        async def notes_create(context, title: str, body: str, confirmed: bool = False):
+            if preview := write_approval(
+                context, "create", {"title": title, "body": body}, confirmed
+            ):
+                return preview
+            session.userdata["writes"].append("create")
+            return {
+                "error": "Notes timed out; it may already have saved. Check before retrying.",
+                "uncertain": True,
+            }
+
+        mocks["notes_create"] = notes_create
+    elif fixture in {"safari_search", "safari_denied", "public_page"}:
         safari = SafariFixture(denied=fixture == "safari_denied")
         session.userdata = {"_safari_simulator": safari.run, "safari": safari}
     elif fixture == "mac_uncertain":
@@ -240,12 +287,21 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture == "partial_notes":
+        state = ctx.job_context.primary_session.userdata
+        if len(
+            [event for event in state["safari"].events if event["action"] == "open"]
+        ) != 1 or state["writes"] != ["create"]:
+            ctx.fail(
+                f"Expected one Safari navigation and one approved uncertain Notes dispatch, without replay; observed {len([e for e in state['safari'].events if e['action'] == 'open'])} navigations, {len(state['writes'])} writes."
+            )
+        return
     if fixture in {"safari_search", "safari_denied", "public_page"}:
         events = ctx.job_context.primary_session.userdata["safari"].events
         opens = [e for e in events if e["action"] == "open"]
         if len(opens) != 1:
             ctx.fail(
-                "Expected exactly one Safari navigation; never retry a denied write."
+                f"Expected exactly one Safari navigation; never retry a denied write. Observed {len(opens)}."
             )
         if fixture == "safari_search" and not any(
             "duckduckgo.com/?q=" in e.get("url", "") for e in opens
@@ -314,6 +370,9 @@ async def check_simulation_state(ctx: SimulationContext) -> None:
                 desktop.app.casefold() != "spotify"
                 or desktop.query.casefold() != "daft punk"
                 or not desktop.searched
+                or not {"open", "inspect", "type", "shortcut"}.issubset(
+                    {e["action"] for e in desktop.events}
+                )
             ):
                 ctx.fail("Expected Spotify to show the submitted Daft Punk search.")
         elif fixture == "mac_no_action" and desktop.events:
@@ -378,14 +437,21 @@ class SafariFixture:
                 ]
             return {"window_id": 7, "tab_index": 1, "url": self.url}
         if request["action"] in {"read", "current"}:
-            library = "duckduckgo.com" in self.url
+            library = "library" in self.url.casefold()
+            livekit = "livekit" in self.url.casefold()
             return {
                 "window_id": 7,
                 "tab_index": 1,
                 "url": self.url,
-                "title": "Northlight Library" if library else "Example Domain",
+                "title": "Northlight Library"
+                if library
+                else "LiveKit voice agents"
+                if livekit
+                else "Example Domain",
                 "text": "Northlight Library opens at 09:00 on Monday."
                 if library
+                else "Search results for LiveKit voice agents"
+                if livekit
                 else "This domain is for use in illustrative examples in documents.",
                 "links": [],
                 "ready": "complete",

@@ -53,7 +53,7 @@ async def test_reminders_create_requires_confirmation(monkeypatch) -> None:
 
     result = await call_create("Buy milk", "October 6, 2026 at 5:00 PM")
 
-    assert "Please confirm" in result
+    assert "No active conversation" in result
     assert not called
 
 
@@ -76,3 +76,15 @@ async def test_reminders_create_runs_after_confirmation(monkeypatch) -> None:
 
     assert result == "Reminder created."
     assert captured["arguments"] == ["Buy milk", "October 6, 2026 at 5:00 PM"]
+
+
+@pytest.fixture(autouse=True)
+def approval_for_confirmed_script_tests(monkeypatch):
+    original = tools.write_approval
+    monkeypatch.setattr(
+        tools,
+        "write_approval",
+        lambda context, action, payload, confirmed: (
+            None if confirmed else original(context, action, payload, confirmed)
+        ),
+    )

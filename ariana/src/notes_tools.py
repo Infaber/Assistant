@@ -124,7 +124,8 @@ async def _notes_request(request: dict) -> dict:
         return await asyncio.to_thread(_run_notes, request)
     except subprocess.TimeoutExpired:
         return {
-            "error": "Notes timed out. Check the app before retrying a write; it may already have succeeded."
+            "error": "Notes timed out. Check the app before retrying a write; it may already have succeeded.",
+            "uncertain": request.get("action") == "edit",
         }
     except (OSError, ValueError):
         return {
