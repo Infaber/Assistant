@@ -55,3 +55,15 @@ def test_microphone_permission_error_does_not_mark_enabled():
     with pytest.raises(PermissionError):
         detector.enable(True)
     assert not detector.enabled
+
+
+def test_capture_state_reports_only_successful_changes():
+    recorder, states = Recorder(), []
+    engine = SimpleNamespace(process=lambda frame: -1, delete=lambda: None)
+    detector = WakeDetector(
+        engine, recorder, lambda event: None, state_changed=states.append
+    )
+    detector.enable(True)
+    detector.enable(True)
+    detector.enable(False)
+    assert states == [True, False]

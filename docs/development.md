@@ -66,7 +66,7 @@ user requests and reversible test data.
 
 ## Validation of this upgrade (7 October 2026)
 
-- 200 Python tests passed; Ruff lint/format passed. One upstream Google typing
+- 201 Python tests passed; Ruff lint/format passed. One upstream Google typing
   deprecation warning remains.
 - Frontend type checking, production build, 19 unit tests and 12 WebKit tests passed.
 - Native Swift compile, state/output-tail tests and real isolated Mac process

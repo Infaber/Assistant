@@ -6,11 +6,14 @@ import queue
 import sys
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 
 
 class WakeDetector:
-    def __init__(self, engine, recorder, emit, clock=time.monotonic):
+    def __init__(
+        self, engine, recorder, emit, clock=time.monotonic, state_changed=None
+    ):
         self.engine, self.recorder, self.emit, self.clock = (
             engine,
             recorder,
@@ -18,6 +21,7 @@ class WakeDetector:
             clock,
         )
         self.enabled = False
+        self.state_changed = state_changed
         self.last_detection = float("-inf")
 
     def enable(self, enabled):
@@ -28,6 +32,8 @@ class WakeDetector:
         else:
             self.recorder.stop()
         self.enabled = enabled
+        if self.state_changed:
+            self.state_changed(enabled)
 
     def frame(self):
         if not self.enabled:
@@ -67,7 +73,14 @@ def main():
 
         engine = pvporcupine.create(access_key=key, keyword_paths=[str(model)])
         recorder = PvRecorder(device_index=-1, frame_length=engine.frame_length)
-        detector = WakeDetector(engine, recorder, output)
+        detector = WakeDetector(
+            engine,
+            recorder,
+            output,
+            state_changed=lambda enabled: output(
+                {"event": "listening", "enabled": enabled}
+            ),
+        )
         commands = queue.Queue()
 
         def receive():
@@ -100,12 +113,15 @@ def main():
         return 2
     finally:
         if detector:
-            detector.close()
+            with suppress(Exception):
+                detector.close()
         else:
             if recorder:
-                recorder.delete()
+                with suppress(Exception):
+                    recorder.delete()
             if engine:
-                engine.delete()
+                with suppress(Exception):
+                    engine.delete()
 
 
 if __name__ == "__main__":

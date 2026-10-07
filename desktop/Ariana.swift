@@ -24,6 +24,8 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     private var wakeGate = WakeGate()
     private var outputSuppression = OutputSuppression()
     private var wakeFailure = ""
+    private var wakeReady = false
+    private var wakeListening = false
     private var lockFile: Int32 = -1
     private let network = NWPathMonitor()
     private var networkOnline = true
@@ -237,10 +239,15 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             }
         }
     }
-    private func syncWake() {
-        wakeGate.outputActive = outputSuppression.blocks(now: ProcessInfo.processInfo.systemUptime)
+    private func refreshWakeLabel() {
         wakeEntry?.state = wakeGate.enabled ? .on : .off
-        wakeEntry?.title = wakeFailure.isEmpty ? "Wake word · " + (wakeGate.enabled ? (wakeGate.armed ? "armed locally" : "paused during conversation") : "off") : "Wake word · " + wakeFailure
+        let label = !wakeFailure.isEmpty ? wakeFailure : !wakeGate.enabled ? "off" : !wakeReady ? "starting local detector" : wakeGate.armed ? (wakeListening ? "armed locally" : "starting local microphone") : "paused during conversation"
+        wakeEntry?.title = "Wake word · " + label
+    }
+    private func syncWake() {
+        if quitting { stopWake(); return }
+        wakeGate.outputActive = outputSuppression.blocks(now: ProcessInfo.processInfo.systemUptime)
+        refreshWakeLabel()
         if !wakeGate.enabled { stopWake(); return }
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             wakeFailure = "microphone permission needed"; wakeEntry?.title = "Wake word · " + wakeFailure; return
@@ -251,34 +258,40 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             process.currentDirectoryURL = root.appendingPathComponent("ariana")
             process.standardInput = input; process.standardOutput = output; process.standardError = log
             wakeInput = input; wakeOutput = output; wakeProcess = process
-            output.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            output.fileHandleForReading.readabilityHandler = { [weak self, weak process] handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-                DispatchQueue.main.async { self?.receiveWake(text) }
+                DispatchQueue.main.async {
+                    guard let self = self, let process = process, self.wakeProcess === process else { return }
+                    self.receiveWake(text)
+                }
             }
-            process.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
-                guard self?.wakeProcess === process else { return }
+            process.terminationHandler = { [weak self] exited in DispatchQueue.main.async {
+                guard self?.wakeProcess === exited else { return }
                 self?.wakeOutput?.fileHandleForReading.readabilityHandler = nil
-                self?.wakeProcess = nil
+                self?.wakeProcess = nil; self?.wakeReady = false; self?.wakeListening = false
                 if self?.wakeGate.enabled == true && self?.quitting == false { self?.wakeFailure = "needs setup or microphone access"; self?.syncWake() }
             } }
-            do { try process.run() } catch { wakeProcess = nil; wakeFailure = "needs setup" }
+            do { try process.run() } catch { wakeProcess = nil; wakeFailure = "needs setup"; stopWake(); refreshWakeLabel() }
         }
         if let data = try? JSONSerialization.data(withJSONObject: ["enabled": wakeGate.armed]) { try? wakeInput?.fileHandleForWriting.write(contentsOf: data + Data([10])) }
     }
     private func stopWake() {
+        wakeReady = false; wakeListening = false; wakeBuffer = ""
         try? wakeInput?.fileHandleForWriting.close(); wakeInput = nil
         wakeOutput?.fileHandleForReading.readabilityHandler = nil
-        wakeProcess?.terminate(); wakeProcess = nil
+        wakeProcess?.terminate(); wakeProcess = nil; wakeOutput = nil
     }
     private func receiveWake(_ text: String) {
         wakeBuffer += text
         while let end = wakeBuffer.firstIndex(of: "\n") {
             let line = String(wakeBuffer[..<end]); wakeBuffer.removeSubrange(...end)
             guard let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            if message["event"] as? String == "wake", wakeGate.detect(now: ProcessInfo.processInfo.systemUptime) {
+            if message["event"] as? String == "ready" { wakeReady = true; syncWake() }
+            else if message["event"] as? String == "listening" { wakeListening = message["enabled"] as? Bool == true; refreshWakeLabel() }
+            else if message["event"] as? String == "wake", wakeGate.detect(now: ProcessInfo.processInfo.systemUptime) {
                 notify("ariana:wake-word"); syncWake()
-            } else if message["event"] as? String == "error" { wakeFailure = "needs setup or microphone access"; syncWake() }
+            } else if message["event"] as? String == "error" { wakeFailure = "needs setup or microphone access"; stopWake(); refreshWakeLabel() }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -296,7 +309,7 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
-        quitting = true; network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
+        quitting = true; notify("ariana:pause"); network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
         agent?.stop(); frontend?.stop()
         let deadline = Date().addingTimeInterval(10)
         func finish() {
