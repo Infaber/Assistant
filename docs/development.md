@@ -50,6 +50,7 @@ lk agent simulate text --scenarios scenarios-mac.yaml
 lk agent simulate text --scenarios scenarios-memory.yaml
 lk agent simulate text --scenarios scenarios-reliability.yaml
 lk agent simulate text --scenarios scenarios-sharing.yaml
+lk agent simulate text --scenarios scenarios-home-assistant.yaml
 ```
 
 Personal integrations are blocked or faked in simulations, including private reads.

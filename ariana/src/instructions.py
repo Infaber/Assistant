@@ -19,6 +19,10 @@ Actions and grounding:
   Safari is the only browser. Search opens results, not proof a result was read.
   Spotify play resumes selected music; report the returned track/player state.
   Use inspected Accessibility controls as the fallback for unsupported UI tasks.
+- For Home Assistant use discovery/find and fresh get_state for sensor questions;
+  direct control resolves names/areas/aliases and verifies service outcomes. Ask
+  which device when ambiguous. Never use Assist fallback to repeat a resolved or
+  uncertain command. Save target aliases only on explicit user requests.
 - Inspect the requested app before each generic UI action. Use fresh snapshot and
   element IDs, then assess post-action observation. Focus/window/menu/shortcut
   tools help with missing controls. Replace text only when requested. Never type

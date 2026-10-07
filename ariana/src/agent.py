@@ -17,6 +17,13 @@ from livekit.plugins import ai_coustics
 from action_events import ActivityPublisher
 from browser_tools import BrowserToolset
 from companion import CompanionBridge
+from home_assistant_tools import (
+    home_assistant_alias,
+    home_assistant_control,
+    home_assistant_find,
+    home_assistant_get_state,
+    home_assistant_inventory,
+)
 from instructions import ARIANA_INSTRUCTIONS
 from mac_tools import mac_control
 from memory_tools import memory_context, memory_manage
@@ -66,6 +73,11 @@ class Assistant(Agent):
             tools=[
                 search_web,
                 home_assistant_request,
+                home_assistant_inventory,
+                home_assistant_find,
+                home_assistant_get_state,
+                home_assistant_control,
+                home_assistant_alias,
                 weather_forecast,
                 calendar_today,
                 calendar_create_event,

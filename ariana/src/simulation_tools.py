@@ -52,6 +52,11 @@ def configure_simulation_tools(
             "reminders_create",
             "mail_send",
             "home_assistant_request",
+            "home_assistant_inventory",
+            "home_assistant_find",
+            "home_assistant_get_state",
+            "home_assistant_control",
+            "home_assistant_alias",
             "calendar_today",
             "reminders_today",
             "mail_unread",
@@ -60,7 +65,20 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture == "relevant_memory":
+    if fixture in {"ha_environment", "ha_lights", "ha_ambiguous", "ha_timeout"}:
+        from home_assistant_simulation import fixture_client
+
+        client, api = fixture_client(fixture)
+        session.userdata = {"_ha_client": client, "ha_api": api}
+        for name in (
+            "home_assistant_inventory",
+            "home_assistant_find",
+            "home_assistant_get_state",
+            "home_assistant_control",
+            "home_assistant_alias",
+        ):
+            mocks.pop(name)
+    elif fixture == "relevant_memory":
         facts = [
             ("esp32", "Building an ESP32 automation project"),
             ("home assistant", "Home Assistant controls LED strips and sensors"),
@@ -287,6 +305,29 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture in {"ha_environment", "ha_lights", "ha_ambiguous", "ha_timeout"}:
+        events = ctx.job_context.primary_session.userdata["ha_api"].events
+        posts = [e for e in events if e[0] == "POST"]
+        reads = [e[1] for e in events if e[0] == "GET"]
+        if fixture in {"ha_lights", "ha_timeout"} and (
+            len(posts) != 1
+            or posts[0][1] != "/api/services/light/turn_on"
+            or posts[0][2] != {"entity_id": "light.desk_led"}
+        ):
+            ctx.fail(
+                "Expected exactly one resolved direct light dispatch, without Assist replay."
+            )
+        if fixture == "ha_environment" and not {
+            "/api/states/sensor.desk_temperature",
+            "/api/states/sensor.desk_humidity",
+        }.issubset(reads):
+            ctx.fail("Expected fresh temperature and humidity state reads.")
+        if (
+            fixture == "ha_ambiguous"
+            and "/api/states/sensor.desk_temperature" not in reads
+        ):
+            ctx.fail("Expected the chosen desk sensor to be read.")
+        return
     if fixture == "partial_notes":
         state = ctx.job_context.primary_session.userdata
         if len(
