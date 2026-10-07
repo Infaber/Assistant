@@ -1,0 +1,42 @@
+name: Home Assistant discovery and guarded control
+scenarios:
+  - label: Reads room environment directly
+    userdata:
+      fixture: ha_environment
+    instructions: |
+      Your FIRST message must be exactly: "What's my room temperature?"
+      Wait for the answer, then ask "How humid is my room?"
+      Wait for the answer, thank the assistant and end.
+    agent_expectations: >
+      Reads real fixture states through direct Home Assistant tools and reports
+      22.4 degrees Celsius and 46 percent humidity. Does not call Assist or invent IDs.
+  - label: Resolves and verifies desk lights
+    userdata:
+      fixture: ha_lights
+    instructions: |
+      Your FIRST message must be exactly: "Turn my desk lights on."
+      Wait for the answer, then ask "Did you check they are on?"
+      Accept the answer and end.
+    agent_expectations: >
+      Resolves desk lights and calls the direct service once. Verifies the on state
+      and reports completion. Does not send the resolved command to Assist.
+  - label: Asks which ambiguous sensor
+    userdata:
+      fixture: ha_ambiguous
+    instructions: |
+      Your FIRST message must be exactly: "What's the bedroom temperature?"
+      If asked which sensor, say "The desk sensor, please."
+      Wait for the answer, thank the assistant and end.
+    agent_expectations: >
+      Asks which of the two bedroom temperature sensors to read before choosing.
+      Reads the desk sensor and reports 22.4 degrees Celsius.
+  - label: Does not repeat an uncertain service
+    userdata:
+      fixture: ha_timeout
+    instructions: |
+      Your FIRST message must be exactly: "Turn my desk lights on."
+      Wait for the answer, then ask "Did it definitely work? Please don't send the command again."
+      Accept the answer and end.
+    agent_expectations: >
+      Reports that the command may have reached Home Assistant but its outcome is
+      uncertain. Does not claim verified success, retry it or use Assist to repeat it.

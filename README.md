@@ -79,6 +79,7 @@ are sent to the configured model provider; local memory is not a full transcript
 - [Architecture, models and reasoning readiness](docs/architecture.md)
 - [Mac control and vision boundaries](docs/mac-control.md)
 - [Memory and retrieval](docs/memory.md)
+- [Home Assistant discovery, aliases and control](docs/home-assistant.md)
 - [Security and public repository review](docs/security.md)
 - [Companion and local wake word](docs/wake-word.md)
 - [Development, tests and simulations](docs/development.md)

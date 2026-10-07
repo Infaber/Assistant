@@ -1,15 +1,14 @@
 import asyncio
 import logging
-import os
 import subprocess
 import sys
 from html import escape
-from urllib.parse import urlparse
 
 import httpx
 from livekit.agents import RunContext, function_tool
 
 from action_events import observed
+from home_assistant_tools import home_assistant_request as home_assistant_request
 from notes_tools import write_approval
 
 logger = logging.getLogger(__name__)
@@ -29,61 +28,6 @@ async def search_web(context: RunContext, query: str):
         context.session.userdata = state
     browser = state.setdefault("_safari_browser", BrowserToolset())
     return await browser.browser_search(context, query)
-
-
-@function_tool
-@observed("Home Assistant")
-async def home_assistant_request(context: RunContext, request: str) -> str:
-    """Send a natural-language smart-home request to Home Assistant."""
-    base_url = os.environ.get("HOME_ASSISTANT_URL", "").strip().rstrip("/")
-    token = os.environ.get("HOME_ASSISTANT_TOKEN", "").strip()
-
-    if not base_url or not token:
-        return (
-            "Home Assistant is not configured. Set HOME_ASSISTANT_URL and "
-            "HOME_ASSISTANT_TOKEN before using smart-home controls."
-        )
-
-    parsed_url = urlparse(base_url)
-    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
-        return "Home Assistant is misconfigured. HOME_ASSISTANT_URL must be an HTTP or HTTPS URL."
-    if parsed_url.username or parsed_url.password:
-        return "Home Assistant is misconfigured. HOME_ASSISTANT_URL cannot contain credentials."
-
-    request = request.strip()
-    if not request:
-        return "Tell me what you want Home Assistant to do."
-
-    endpoint = f"{base_url}/api/conversation/process"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                endpoint,
-                headers=headers,
-                json={"text": request},
-            )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as error:
-        if error.response.status_code in {401, 403}:
-            return "Home Assistant rejected the request. Check the access token."
-        return f"Home Assistant returned an HTTP {error.response.status_code} error."
-    except httpx.RequestError:
-        return "I couldn't reach Home Assistant right now. Check that it is online and the URL is correct."
-
-    try:
-        payload = response.json()
-        speech = payload["response"]["speech"]["plain"]["speech"]
-    except (ValueError, KeyError, TypeError):
-        return "Home Assistant returned an unexpected response."
-
-    if not isinstance(speech, str) or not speech.strip():
-        return "Home Assistant did not return a spoken response."
-    return speech.strip()
 
 
 @function_tool

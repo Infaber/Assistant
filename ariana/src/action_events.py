@@ -119,7 +119,13 @@ def observed(label):
                 raise
             status, detail = result_state(result)
             if receipt:
-                receipt.status = status
+                receipt.status = (
+                    "failed"
+                    if isinstance(result, dict)
+                    and result.get("dispatched") is False
+                    and status == "uncertain"
+                    else status
+                )
             await emit(context, {**event, "status": status, "detail": detail})
             return result
 

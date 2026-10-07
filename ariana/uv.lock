@@ -217,6 +217,7 @@ name = "ariana-assistant"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "httpx" },
     { name = "livekit-agents", extra = ["google", "images"] },
     { name = "livekit-plugins-ai-coustics" },
@@ -240,6 +241,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.12,<4" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "livekit-agents", extras = ["google", "images"], specifier = "~=1.8" },
     { name = "livekit-plugins-ai-coustics", specifier = "~=0.3" },

@@ -81,6 +81,9 @@ def is_write(name, arguments):
         "mail_send",
     }:
         return arguments.get("confirmed", False)
+    if name == "home_assistant_request":
+        # Assist can mutate devices; its separate approval is code-enforced.
+        return arguments.get("confirmed", False)
     if name == "mac_control":
         return arguments.get("action") in {
             "click",
