@@ -247,7 +247,7 @@ Ariana remembers useful, non-sensitive facts you tell her about yourself without
 
 Memory stays on the machine running the Python agent, in `~/Library/Application Support/Ariana/memory.sqlite3` on macOS. It stores up to 100 short facts, with the 20 most recently updated supplied at startup; she can search the remaining facts. Fixed preferences stay in the existing preferences file. This is not a recording or complete conversation archive. Sensitive details, credentials and information read from apps/websites should not be saved. Moving the agent to another machine does not automatically move its memory.
 
-The frontend uses a dark command-centre design with a procedural holographic globe, audio-reactive animation, capability shortcuts, focus mode, responsive layouts and reduced-motion support. Start it with `cd frontend` then `npm run dev`, and open the localhost address printed in the terminal. Start the Python agent separately for conversations.
+The frontend centers a single animated blue orb on pure black, with six inner styles, microphone/speech reactions, optional captions and spoken thinking feedback. Tap the orb to connect; type or press ⌘K for the message pill. Settings holds conversation history, file sharing guidance, screen sharing and check-ins. It supports mobile layouts and reduced motion. Start it with `cd frontend` then `npm run dev`, and open the localhost address printed in the terminal. Start the Python agent separately for conversations.
 
 ## Safari browsing and verified Mac actions
 
@@ -272,7 +272,7 @@ applies to that operation, not an entire multi-step task. Timeouts remain uncert
 Ariana checks the result rather than automatically repeating a click or write.
 Right-click and double-click also require an inspected, unobstructed target.
 
-The frontend's **Activity** view shows live action progress, approval requests,
+The frontend's **Settings → Conversation & activity** view shows live action progress, approval requests,
 verified results and failures. It retains at most 40 events for the current
 connection, in memory only; it does not include tool arguments, page text, notes,
 or provider error payloads. Plain-text results from older integrations are marked

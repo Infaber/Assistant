@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Ariana — Your personal assistant',
-  description: 'Your personal intelligence workspace. Speak, explore and get things done with Ariana.',
+  description: 'Ariana. A quiet presence. Speak, create and get things done.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
