@@ -16,6 +16,7 @@ from livekit.plugins import ai_coustics
 
 from action_events import ActivityPublisher
 from browser_tools import BrowserToolset
+from camera_tools import camera_announcements, camera_snapshot, camera_status
 from companion import CompanionBridge
 from home_assistant_tools import (
     home_assistant_alias,
@@ -72,6 +73,9 @@ class Assistant(Agent):
             llm=realtime_model(_google_api_key(), model_name),
             tools=[
                 search_web,
+                camera_status,
+                camera_snapshot,
+                camera_announcements,
                 home_assistant_request,
                 home_assistant_inventory,
                 home_assistant_find,

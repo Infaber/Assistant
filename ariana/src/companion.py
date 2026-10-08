@@ -11,6 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from attachments import MAX_FILE_BYTES, MAX_FILES, MAX_SESSION_FILES, decode_attachment
+from camera_events import start_camera_events
 
 logger = logging.getLogger(__name__)
 ATTACHMENT_TOPIC = "ariana.attachments"
@@ -107,6 +108,8 @@ class CompanionBridge:
         self.session.on("conversation_item_added", self.on_message)
         self.session.on("user_state_changed", self.on_user_state)
         self.spawn(self.check_in_loop())
+        if camera_events := start_camera_events(self):
+            self.session.userdata["_camera_events"] = camera_events
 
     def spawn(self, coroutine):
         task = asyncio.create_task(coroutine)
@@ -303,14 +306,22 @@ class CompanionBridge:
                 and not self.uploads
             )
             now = time.monotonic()
+            camera_events = self.session.userdata.get("_camera_events")
+            camera_speech_enabled = (
+                camera_events is not None
+                and camera_events.enabled
+                and camera_events.status == "connected"
+            )
             # Gemini aborts silent live connections after roughly 150 seconds.
             # Refresh the idle transport before that, retaining completed context
             # and session userdata without generating speech or replaying actions.
             if (
                 self.refresh_agent is not None
                 and idle
-                and self.policy.enabled
-                and now < self.policy.lease_until
+                and (
+                    (self.policy.enabled and now < self.policy.lease_until)
+                    or camera_speech_enabled
+                )
                 and now - max(self.last_refresh, self.policy.last_activity) >= 120
             ):
                 self.last_refresh = now

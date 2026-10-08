@@ -65,7 +65,7 @@ def bridge():
         agent.chat_ctx = chat
 
     agent.update_chat_ctx.side_effect = update
-    session = SimpleNamespace(generate_reply=Mock(), current_agent=agent)
+    session = SimpleNamespace(generate_reply=Mock(), current_agent=agent, userdata={})
     return CompanionBridge(room, session)
 
 
@@ -227,8 +227,9 @@ async def test_failed_check_in_delivery_does_not_block_future_check_ins(
 
 
 @pytest.mark.parametrize("busy", [False, True])
+@pytest.mark.parametrize("camera_only", [False, True])
 async def test_idle_transport_refresh_preserves_context_without_speech(
-    monkeypatch, busy
+    monkeypatch, busy, camera_only
 ):
     import companion
 
@@ -244,6 +245,11 @@ async def test_idle_transport_refresh_preserves_context_without_speech(
     b.session.update_agent = Mock()
     b.policy.configure(settings(), 0)
     b.policy.lease_until = 200
+    if camera_only:
+        b.policy.enabled = False
+        b.session.userdata["_camera_events"] = SimpleNamespace(
+            enabled=True, status="connected"
+        )
     b.policy.awaiting_user = (
         True  # Still maintain transport after one unanswered prompt.
     )

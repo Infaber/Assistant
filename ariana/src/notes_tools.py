@@ -28,7 +28,10 @@ def write_approval(
         state = {}
         session.userdata = state
     users = [
-        item for item in session.history.items if getattr(item, "role", None) == "user"
+        item
+        for item in session.history.items
+        if getattr(item, "role", None) == "user"
+        and not str(item.id).startswith(("camera-image-", "camera-event-"))
     ]
     if not users:
         return "Ask the user before changing Notes. Nothing was saved."

@@ -58,3 +58,5 @@ jobs:
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-sharing.yaml
       - name: Check Home Assistant discovery and guarded service control
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-home-assistant.yaml
+      - name: Check camera consent and current detection using fictional fixtures
+        run: lk agent simulate text --concurrency 1 --scenarios scenarios-camera.yaml
