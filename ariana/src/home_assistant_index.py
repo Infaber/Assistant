@@ -14,6 +14,7 @@ DOMAINS = {
     "media_player",
     "fan",
     "weather",
+    "camera",
 }
 MAX_ENTITIES = 1500
 
@@ -89,6 +90,7 @@ class Inventory:
             self.entities[eid] = {
                 "entity_id": eid,
                 "registry_id": entry.get("id"),
+                "platform": entry.get("platform", ""),
                 "name": safe_text(
                     attrs.get("friendly_name")
                     or entry.get("name")

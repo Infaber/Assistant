@@ -154,6 +154,17 @@ async def memory_manage(
         return {
             "error": "Use remember, recall, forget, pause or resume. No memory was changed."
         }
+    if action == "remember" and state.get("_camera_private_turn"):
+        users = [
+            item
+            for item in context.session.history.items
+            if getattr(item, "role", None) == "user"
+            and not str(item.id).startswith("camera-image-")
+        ]
+        if users and users[-1].id == state["_camera_private_turn"]:
+            return {
+                "error": "Camera-derived information cannot be saved in personal memory during image analysis."
+            }
     backend = state.get("_memory_simulator") or MemoryStore().run
     try:
         return await asyncio.to_thread(

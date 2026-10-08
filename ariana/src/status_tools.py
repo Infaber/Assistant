@@ -31,6 +31,16 @@ async def assistant_status() -> dict:
             os.getenv(key, "").strip()
             for key in ("HOME_ASSISTANT_URL", "HOME_ASSISTANT_TOKEN")
         ),
+        "camera_access_enabled": os.getenv("ARIANA_CAMERA_ENABLED", "false").lower()
+        == "true",
+        "frigate_auth_configured": bool(
+            os.getenv("FRIGATE_TOKEN")
+            or (os.getenv("FRIGATE_USERNAME") and os.getenv("FRIGATE_PASSWORD"))
+        ),
+        "camera_event_subscription_enabled": os.getenv(
+            "ARIANA_CAMERA_EVENTS_ENABLED", "false"
+        ).lower()
+        == "true",
         "local_mac": sys.platform == "darwin",
         "note": "Configured means settings are present, not that connection or authentication was verified. Apple apps need their individual Automation permissions.",
     }

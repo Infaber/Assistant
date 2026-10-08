@@ -84,3 +84,5 @@ are sent to the configured model provider; local memory is not a full transcript
 - [Companion and local wake word](docs/wake-word.md)
 - [Development, tests and simulations](docs/development.md)
 - [Frontend configuration](frontend/README.md)
+
+Optional read-only camera integration: [Frigate awareness, image consent and event setup](docs/camera-awareness.md).

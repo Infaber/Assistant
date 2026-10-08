@@ -129,3 +129,5 @@ this is not a passed simulation run. Real Gemini debugger conversations with a
 fake HA backend checked fresh temperature/humidity reads, one verified light
 service, sensor disambiguation and honest timeout reporting without replay. CI includes the new scenarios for a future run with
 available simulation quota. No test contacted the user's real HA instance.
+
+Camera entities are now discoverable alongside sensors. For Frigate counts, cloud-image consent and optional event notifications, see [camera awareness](camera-awareness.md).

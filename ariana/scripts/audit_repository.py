@@ -4,6 +4,7 @@ Candidates require review; removing a file does not revoke a leaked credential.
 
 import re
 import subprocess
+from pathlib import Path
 
 PATTERNS = {
     "Google API key": re.compile(rb"AIza[0-9A-Za-z_-]{35}"),
@@ -14,7 +15,7 @@ PATTERNS = {
     ),
     "private key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "assigned credential": re.compile(
-        rb"""(?im)^\s*(?:LIVEKIT_API_SECRET|GOOGLE_API_KEY|GEMINI_API_KEY|HOME_ASSISTANT_TOKEN|ARIANA_ACCESS_CODE|PORCUPINE_ACCESS_KEY)\s*=\s*["']?([A-Za-z0-9_./+-]{24,})"""
+        rb"""(?im)^\s*(?:LIVEKIT_API_SECRET|GOOGLE_API_KEY|GEMINI_API_KEY|HOME_ASSISTANT_TOKEN|ARIANA_ACCESS_CODE|PORCUPINE_ACCESS_KEY|FRIGATE_TOKEN|FRIGATE_PASSWORD)\s*=\s*["']?([A-Za-z0-9_./+-]{24,})"""
     ),
 }
 
@@ -37,6 +38,27 @@ def audit():
                 in {b"your-long-lived-access-token", b"your-picovoice-access-key"}
             ):
                 findings.append((sha.decode(), path.decode(errors="replace"), kind))
+    # Include staged/new tracked files, not just historical blobs.
+    root = Path(
+        subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
+        .decode()
+        .strip()
+    )
+    for path in subprocess.check_output(["git", "ls-files", "--full-name", "-z"]).split(
+        b"\0"
+    ):
+        if not path:
+            continue
+        candidate = root / path.decode(errors="replace")
+        if not candidate.is_file():
+            continue
+        for kind, pattern in PATTERNS.items():
+            if (match := pattern.search(candidate.read_bytes())) and not (
+                kind == "assigned credential"
+                and match.group(1)
+                in {b"your-long-lived-access-token", b"your-picovoice-access-key"}
+            ):
+                findings.append(("working-tree", str(candidate), kind))
     for sha, path, kind in findings:
         print(f"REVIEW {kind}: blob {sha} file {path}")
     print(f"Credential candidate count: {len(findings)}; values are redacted.")
