@@ -74,6 +74,27 @@ class CameraAwareness:
             "verified": True,
         }
 
+    async def live_count(self, camera):
+        # A fresh read of Frigate's own tracker is independent of HA's last-change
+        # timestamp. Preserve stationary tracks and verify capture on both sides.
+        health = await self.health(camera)
+        if not health["online"]:
+            raise CameraError("Camera is offline; current count is unknown.")
+        ids = await self.api.live_activity(camera)
+        health = await self.health(camera)
+        if not health["online"]:
+            raise CameraError("Camera went offline; current count is unknown.")
+        return {
+            "camera": camera,
+            "person_count": len(ids),
+            "person_track_ids": ids,
+            "identity": "unknown",
+            "source": "authenticated Frigate live activity",
+            "observed_at": time.time(),
+            "verified": True,
+            "meaning": "Current server tracker state, not guaranteed physical occupancy or identity; no stale Home Assistant value was reused.",
+        }
+
     async def current(self, context, camera, entity_id=""):
         # Resolve actual discovered HA metadata, never fabricate sensor IDs.
         ha = client_for(context)
@@ -135,10 +156,15 @@ class CameraAwareness:
         updated = timestamp(row.get("last_reported") or row.get("last_updated"))
         now = time.time()
         if updated is None or not 0 <= now - updated <= 90:
-            raise CameraError(
-                "Detection data is stale. Current occupancy is unknown; unchanged HA sensors may need fresh MQTT reporting."
-            )
+            try:
+                return await self.live_count(camera)
+            except CameraError:
+                raise CameraError(
+                    "Home Assistant count is stale and fresh Frigate activity could not be verified; current occupancy is unknown."
+                ) from None
         raw = row.get("state")
+        if isinstance(raw, str) and raw in {"unavailable", "unknown"}:
+            return await self.live_count(camera)
         if (
             entity["domain"] == "binary_sensor"
             and entity["device_class"] in {"occupancy", "presence"}

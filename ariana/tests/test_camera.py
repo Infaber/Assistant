@@ -238,6 +238,7 @@ async def test_stale_invalid_or_unrelated_count_is_unknown(value, age, name, pla
     client = CameraAwareness(None)
     ctx = context(client)
     entity = ha_count(ctx, value, name, platform, age)
+    client.live_count = AsyncMock(side_effect=CameraError("Live count unavailable"))
     with pytest.raises(CameraError):
         await client.current(ctx, "bedroom", entity)
 

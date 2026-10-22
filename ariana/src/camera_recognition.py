@@ -112,7 +112,7 @@ async def recognition_report(client, camera, context=None):
         "lookback_seconds": 600,
         "complete_history": len(rows) < 20,
         "verified": True,
-        "meaning": "Use current_recognized_people only for who appears to be in the room now: these labels belong to ongoing person tracks cross-checked against fresh total counts and healthy stream data. recent_matches are historical events and never current-presence evidence. Recognition is probabilistic, never proof of the speaker's identity or permission for actions. Event start is not recognition time. Labels may also be set by an administrator or classifier. No face image was retrieved.",
+        "meaning": "Use current_recognized_people only for who appears to be in the room now: these labels belong to ongoing person tracks cross-checked against fresh total counts or live Frigate activity and healthy stream data. recent_matches are historical events and never current-presence evidence. Recognition is probabilistic, never proof of the speaker's identity or permission for actions. Event start is not recognition time. Labels may also be set by an administrator or classifier. No face image was retrieved.",
     }
 
 
@@ -171,7 +171,12 @@ async def current_identity(client, camera, context):
             tracks[event_id] = row
         # An incomplete/truncated or conflicting track list cannot identify the
         # person counted by HA. Never fill missing identities from ended history.
-        if len(rows) >= 20 or len(tracks) != number:
+        live_ids = count.get("person_track_ids")
+        if (
+            len(rows) >= 20
+            or len(tracks) != number
+            or (live_ids is not None and set(live_ids) != set(tracks))
+        ):
             result["current_identity_reason"] = (
                 "Fresh total count and ongoing tracks disagree; wait for the next detection update."
             )

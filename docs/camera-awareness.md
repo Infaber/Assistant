@@ -61,10 +61,28 @@ HA sensors, not a claim that every object in the room has been detected.
 
 Current data requires a reporting timestamp no older than 90 seconds. HA's
 `last_reported` is preferred, with `last_updated` as a conservative fallback.
-Unchanged sensors can therefore be reported as stale even while the room is
-unchanged: configure reliable MQTT/HA reporting rather than accepting old values
-as current. Missing registry provenance, unavailable sensors or stale stats mean
-**unknown**. No history-based occupancy fallback is used.
+Unchanged MQTT sensors may have an old timestamp even while the room is
+unchanged. Ariana never relabels an old HA value as fresh. For stale/unavailable
+native count data, it instead checks healthy recent Frigate capture stats,
+requests one authenticated live tracker snapshot, then verifies capture again.
+If that independent check fails, the answer remains unknown. Missing registry
+provenance or invalid sensors are still refused. No historical count is reused.
+
+
+### Independent live count fallback
+
+On Frigate 0.18, Ariana uses its authenticated `/ws` UI transport only for a
+read-only `onConnect` state query. The installed viewer authorization and handler
+were inspected: the query publishes current activity and does not change
+configuration. Only person/person-verified track IDs are retained, including
+stationary people; no images, names or arbitrary command topics are requested.
+Detection must be enabled. The connection lasts at most eight seconds after
+authentication, accepts at most 32 bounded messages and closes immediately after
+the activity reply. Redirects, duplicate/missing IDs, disabled detection, malformed
+activity, login failures and unsupported versions leave the result unknown.
+Capture is checked before and after. The observation time records the fresh
+server-state retrieval, not the age of an individual video frame or guarantee
+that the detector cannot lag. There is no continuous polling or video upload.
 
 ## Snapshot permission and retention
 
@@ -189,9 +207,10 @@ Camera-derived memory writes are blocked for that turn.
 
 Matches require a finite **sub-label** confidence of at least 0.95. Object-detection
 confidence is never substituted. Missing, low-confidence or invalid results remain
-unknown. Current identity uses a fresh discovered HA total person count, healthy
-recent camera stats and ongoing person events (`in_progress=1`, excluding
-thumbnails). Track count must match the sensor count. Ended, false-positive,
+unknown. Current identity uses a fresh discovered HA total person count (or the
+independent live Frigate fallback), healthy recent camera stats and ongoing person events (`in_progress=1`, excluding
+thumbnails). Track count must match the observed count; live fallback IDs must match the
+ongoing event IDs exactly. Ended, false-positive,
 duplicate or inconsistent tracks never establish current identity. Long-running
 ongoing tracks are eligible regardless of when they started, so staying seated
 for more than ten minutes does not hide a recognized person. Unknown people

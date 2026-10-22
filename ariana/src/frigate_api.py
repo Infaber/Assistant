@@ -4,8 +4,9 @@ import asyncio
 import json
 import os
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
+import aiohttp
 import httpx
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -132,3 +133,89 @@ class FrigateAPI:
                 ) from None
             except (ValueError, UnicodeError):
                 raise CameraError("Frigate returned an invalid response.") from None
+
+    async def live_activity(self, camera):
+        """One bounded authenticated UI state query; never publishes mutations."""
+        identifier(camera)
+        # Reuse the verified login flow, including bearer-token expiry handling.
+        await self.get("/api/version", text=True)
+        p = urlsplit(self.url)
+        url = urlunsplit(
+            ("wss" if p.scheme == "https" else "ws", p.netloc, "/ws", "", "")
+        )
+        trace = aiohttp.TraceConfig()
+
+        async def reject_redirect(*args):
+            raise CameraError("Frigate live-state redirects are refused.")
+
+        trace.on_request_redirect.append(reject_redirect)
+
+        async def read():
+            async with (
+                aiohttp.ClientSession(trace_configs=[trace]) as client,
+                client.ws_connect(
+                    url,
+                    headers={"Authorization": "Bearer " + self._token},
+                    max_msg_size=MAX_BYTES,
+                ) as ws,
+            ):
+                # Frigate explicitly allows onConnect for authenticated viewer
+                # roles. Its handler publishes current state, never changes it.
+                await ws.send_json({"topic": "onConnect", "payload": ""})
+                for _ in range(32):
+                    frame = await ws.receive_json()
+                    if (
+                        not isinstance(frame, dict)
+                        or frame.get("topic") != "camera_activity"
+                    ):
+                        continue
+                    payload = frame.get("payload")
+                    data = json.loads(payload) if isinstance(payload, str) else payload
+                    row = data.get(camera) if isinstance(data, dict) else None
+                    if not isinstance(row, dict) or not isinstance(
+                        row.get("objects"), list
+                    ):
+                        raise CameraError(
+                            "Current Frigate activity is unavailable for this camera."
+                        )
+                    config = row.get("config") or {}
+                    if (
+                        not isinstance(config, dict)
+                        or config.get("enabled") is not True
+                        or config.get("detect") is not True
+                    ):
+                        raise CameraError(
+                            "Camera detection is disabled or its state is unknown."
+                        )
+                    objects = row["objects"]
+                    if len(objects) > 100:
+                        raise CameraError("Current camera activity is oversized.")
+                    ids = []
+                    for item in objects:
+                        if not isinstance(item, dict) or not isinstance(
+                            item.get("label"), str
+                        ):
+                            raise CameraError("Current camera objects are invalid.")
+                        if item["label"] in {"person", "person-verified"}:
+                            ids.append(identifier(item.get("id")))
+                    if len(set(ids)) != len(ids):
+                        raise CameraError("Current person track IDs are inconsistent.")
+                    return ids
+                raise CameraError("Frigate did not return a current activity snapshot.")
+
+        try:
+            return await asyncio.wait_for(read(), 8)
+        except aiohttp.WSServerHandshakeError as error:
+            if error.status in {401, 403}:
+                if self._username:
+                    self._token = ""
+                raise CameraError(
+                    "Frigate live-state authentication was rejected."
+                ) from None
+            raise CameraError(
+                "Frigate live activity is unavailable on this version."
+            ) from None
+        except (aiohttp.ClientError, OSError, ValueError, TimeoutError):
+            raise CameraError(
+                "Frigate live activity could not be verified; no stale value was reused."
+            ) from None
