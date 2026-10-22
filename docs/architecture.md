@@ -11,8 +11,8 @@ Google documents stable `gemini-3.8-live` as its recommended low-latency Live mo
 [LiveKit Gemini plugin](https://docs.livekit.io/agents/models/realtime/plugins/gemini/),
 [LiveKit Python reference](https://docs.livekit.io/reference/python/livekit/plugins/google/realtime/index.html).
 The locked Google plugin is 1.8.5. `src/model_config.py` is the common startup and
-recovery constructor. `ARIANA_GOOGLE_MODEL` overrides the default. Voice remains
-Achernar and language en-GB. Secrets are read from the environment.
+recovery constructor. `ARIANA_GOOGLE_MODEL` overrides the default. The default voice is warm Sulafat with American English delivery.
+`ARIANA_GOOGLE_VOICE` overrides the voice across startup and recovery. Secrets are read from the environment.
 
 3.8 defaults to asynchronous tools; Ariana explicitly selects Google's supported
 BLOCKING mode to preserve its guarded tool flow. Removed affective/proactivity

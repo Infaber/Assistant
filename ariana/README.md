@@ -1,7 +1,7 @@
 # Ariana backend
 
 The Python project is `ariana-assistant`. It uses Gemini Live through LiveKit with
-`gemini-3.8-live` as the configurable default, Achernar voice and British English.
+`gemini-3.8-live` as the configurable default, Sulafat voice and American English.
 
 Start with the [repository setup](../README.md). Detailed documentation:
 

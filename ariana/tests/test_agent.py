@@ -177,13 +177,14 @@ def test_default_live_model_keeps_voice_and_safe_tool_mode(monkeypatch):
     import model_config
 
     monkeypatch.delenv("ARIANA_GOOGLE_MODEL", raising=False)
+    monkeypatch.delenv("ARIANA_GOOGLE_VOICE", raising=False)
     factory = Mock(return_value="model")
     monkeypatch.setattr(model_config.google.realtime, "RealtimeModel", factory)
     assert model_config.realtime_model("test-key") == "model"
     assert factory.call_args.kwargs == {
         "model": "gemini-3.8-live",
-        "voice": "Achernar",
-        "language": "en-GB",
+        "voice": "Sulafat",
+        "language": "en-US",
         "api_key": "test-key",
         "tool_behavior": model_config.types.Behavior.BLOCKING,
     }

@@ -1,7 +1,7 @@
 # Ariana
 
 A personal voice assistant built with LiveKit Agents and Google's Gemini Live
-API. Ariana uses `gemini-3.8-live`, the `Achernar` voice, and British
+API. Ariana uses `gemini-3.8-live`, the `Sulafat` voice, and American
 English. Gemini handles speech input, speech output, and turn detection.
 
 Ariana searches and reads through the real Safari app on the Mac running the

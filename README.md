@@ -1,6 +1,6 @@
 # Ariana
 
-Ariana is a personal Mac voice assistant: a quiet animated orb, natural British
+Ariana is a personal Mac voice assistant: a quiet animated orb, natural American
 English, local memory and practical tools for Safari, Spotify, Home Assistant,
 Notes, Calendar, Reminders and Mail. She uses LiveKit and Gemini Live. Run the
 backend on your Mac to use its apps; a hosted worker cannot control your Mac.

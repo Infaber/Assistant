@@ -26,5 +26,9 @@ def realtime_model(api_key: str, model_name: str = ""):
         # Ariana's serial tool/result flow; never send removed proactive/affective flags.
         options["tool_behavior"] = types.Behavior.BLOCKING
     return google.realtime.RealtimeModel(
-        model=model, voice="Achernar", language="en-GB", api_key=api_key, **options
+        model=model,
+        voice=os.getenv("ARIANA_GOOGLE_VOICE", "").strip() or "Sulafat",
+        language="en-US",
+        api_key=api_key,
+        **options,
     )
