@@ -11,6 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 
+from camera_arrivals import ArrivalTracks, count_value, verified_track_ids
 from camera_awareness import camera_for, timestamp
 from camera_recognition import current_identity, recognition_enabled
 from camera_settings import CameraPermission, configured_sources
@@ -32,6 +33,7 @@ class CameraTransitions:
         self.last_spoken = -float("inf")
         self.cooldown = cooldown if cooldown is not None else 15 if greetings else 120
         self.empty_since = {}
+        self.recent_drop = {}
         self.last_reason = "baseline"
 
     def reset(self):
@@ -39,6 +41,7 @@ class CameraTransitions:
         self.seen.clear()
         self.observed.clear()
         self.empty_since.clear()
+        self.recent_drop.clear()
 
     def accept(self, entity, row, kind, now=None):
         now = time.time() if now is None else now
@@ -65,20 +68,27 @@ class CameraTransitions:
             self.empty_since.setdefault(entity, observed)
         elif kind == "person" and state in {"unknown", "unavailable"}:
             self.empty_since.pop(entity, None)
+            self.recent_drop.pop(entity, None)
         if previous is None or previous == state:
             return None
         if kind == "person":
-            try:
-                before, after = float(previous), float(state)
-                if (
-                    not before.is_integer()
-                    or not after.is_integer()
-                    or not 0 <= before <= 100
-                    or not 0 <= after <= 100
-                ):
-                    return None
-            except ValueError:
+            before, after = count_value(previous), count_value(state)
+            if before is None or after is None:
                 return None
+            if after < before:
+                high, changed = self.recent_drop.get(entity, (before, observed))
+                self.recent_drop[entity] = (
+                    max(high, before) if observed - changed < 3 else before,
+                    observed,
+                )
+            if self.greetings and after > before:
+                drop = self.recent_drop.get(entity)
+                if drop and after <= drop[0] and observed - drop[1] < 3:
+                    self.last_reason = "brief_detection_gap"
+                    return None
+                if before > 0:
+                    self.last_reason = "additional_arrival"
+                    return "Hey, welcome back."
             if before == 0 < after:
                 if self.greetings:
                     away = self.empty_since.pop(entity, previous_time)
@@ -114,6 +124,9 @@ class CameraEventBridge:
         self.permission = CameraPermission()
         self.enabled = False
         self.pending = None
+        self.pending_arrival = None
+        self.arrival_tracks = ArrivalTracks()
+        self.baseline_needed = True
         self.pending_generation = 0
         self.name_task = None
         self.name_resolved = False
@@ -134,8 +147,12 @@ class CameraEventBridge:
         self.sync_permission()
 
     def sync_permission(self):
+        was_enabled = self.enabled
         self.enabled = self.permission.enabled(self.transitions.camera, self.sources)
         self.last_permission_sync = time.monotonic()
+        if self.enabled and not was_enabled:
+            self.baseline_needed = True
+            self.arrival_tracks = ArrivalTracks()
         if not self.enabled:
             self.cancel_pending("permission_disabled")
             if self.speaking and self.companion.speech is not None:
@@ -143,6 +160,7 @@ class CameraEventBridge:
 
     def cancel_pending(self, reason):
         self.pending = None
+        self.pending_arrival = None
         self.pending_generation += 1
         self.last_decision = reason
         if (
@@ -173,16 +191,19 @@ class CameraEventBridge:
                     result = await asyncio.wait_for(
                         self.identity_lookup(), min(3, deadline - time.monotonic())
                     )
-                    names = []
-                    if result.get("current_presence_verified"):
-                        for person in result.get("current_recognized_people", [])[:3]:
-                            name = person.get("reported_name", "").strip()
-                            if (
-                                name
-                                and len(name) <= 40
-                                and all(c.isalpha() or c in " '-" for c in name)
-                            ):
-                                names.append(name)
+                    arrival = self.pending_arrival
+                    if not self.pending or self.pending_generation != generation:
+                        return
+                    tracks = verified_track_ids(result)
+                    if (
+                        arrival is not None
+                        and tracks is not None
+                        and len(tracks) < arrival.count
+                    ):
+                        self.cancel_pending("arrival_not_present")
+                        return
+                    self.arrival_tracks.remember(result)
+                    names = arrival.names(result) if arrival is not None else []
                     if names:
                         text = (
                             "Hey "
@@ -217,6 +238,15 @@ class CameraEventBridge:
                 else "expired"
             )
             return
+        if self.pending_arrival is not None:
+            arrival = self.pending_arrival
+            current = count_value(self.transitions.states.get(arrival.entity))
+            if current != arrival.count:
+                self.cancel_pending("arrival_count_changed")
+                return
+            if now < arrival.stable_at:
+                self.last_decision = "waiting_for_stable_arrival"
+                return
         if not self.idle():
             self.last_decision = "conversation_busy"
             return
@@ -233,7 +263,7 @@ class CameraEventBridge:
             )
         if (
             self.named_greetings
-            and self.transitions.greetings
+            and self.pending_arrival is not None
             and not self.name_resolved
         ):
             if self.name_task is None:
@@ -249,6 +279,7 @@ class CameraEventBridge:
         if not self.transitions.can_speak(now, enabled=True, idle=True):
             return
         self.pending = None  # Dispatched once; uncertain speech is never replayed.
+        self.pending_arrival = None
         self.pending_generation += 1
         self.last_decision = "dispatched"
         try:
@@ -266,6 +297,13 @@ class CameraEventBridge:
         while not self.companion.closed:
             if time.monotonic() - self.last_permission_sync >= 5:
                 self.sync_permission()
+            if (
+                self.baseline_needed
+                and self.enabled
+                and self.status == "connected"
+                and not self.pending
+            ):
+                await self.capture_arrival_baseline()
             await self.flush_pending()
             await asyncio.sleep(1)
 
@@ -295,6 +333,17 @@ class CameraEventBridge:
                 break
             await asyncio.sleep(delay)
             delay = 2 if self.status == "connected" else min(60, delay * 2)
+
+    async def capture_arrival_baseline(self):
+        self.baseline_needed = False
+        self.arrival_tracks = ArrivalTracks()
+        if not (self.enabled and self.named_greetings and self.transitions.greetings):
+            return
+        try:
+            result = await asyncio.wait_for(self.identity_lookup(), 3)
+            self.arrival_tracks.remember(result)
+        except Exception:
+            pass  # An unavailable baseline permits only unnamed additional arrivals.
 
     async def subscribe(self):
         url, token = configuration()
@@ -387,6 +436,7 @@ class CameraEventBridge:
                 "Camera event subscription connected; persistent speech enabled=%s",
                 self.enabled,
             )
+            await self.capture_arrival_baseline()
             async for message in ws:
                 if message.type != aiohttp.WSMsgType.TEXT:
                     continue
@@ -412,6 +462,7 @@ class CameraEventBridge:
     async def observe(self, entity, row):
         if not isinstance(row, dict) or entity not in self.sources:
             return
+        before = count_value(self.transitions.states.get(entity))
         text = self.transitions.accept(entity, row, self.sources[entity])
         accepted = self.transitions.observed.get(entity) == timestamp(
             row.get("last_updated")
@@ -425,8 +476,23 @@ class CameraEventBridge:
             self.cancel_pending("departure")
         if accepted and self.transitions.last_reason == "brief_detection_gap":
             self.last_decision = "brief_detection_gap"
+        after = count_value(row.get("state"))
+        if (
+            accepted
+            and self.sources[entity] == "person"
+            and self.pending_arrival is not None
+            and after != self.pending_arrival.count
+            and not text
+        ):
+            self.cancel_pending("arrival_count_changed")
         if text and self.enabled:
+            arrival = None
+            if self.transitions.greetings and self.sources[entity] == "person":
+                arrival = self.arrival_tracks.arrival(
+                    entity, before, after, time.monotonic(), self.pending_arrival
+                )
             self.cancel_pending("new_arrival")
+            self.pending_arrival = arrival
             self.pending = (text, time.monotonic() + 60)
             await self.flush_pending()
 

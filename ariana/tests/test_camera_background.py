@@ -22,6 +22,13 @@ def bridge(state="idle", user="away"):
     return result
 
 
+def queue_empty_arrival(b, text="Hey, welcome back."):
+    entity = next(iter(b.sources))
+    b.transitions.states[entity] = "1"
+    b.pending_arrival = b.arrival_tracks.arrival(entity, 0, 1, time.monotonic())
+    b.pending = (text, time.monotonic() + 60)
+
+
 def test_permission_survives_new_sessions_and_is_scoped_and_revocable(tmp_path):
     store = CameraPermission(tmp_path / "speech.json")
     sources = {"sensor.bedroom_person_count": "person"}
@@ -197,12 +204,14 @@ async def test_fresh_verified_identity_personalizes_greeting():
     b.identity_lookup = AsyncMock(
         return_value={
             "current_presence_verified": True,
+            "person_track_ids": ["track-1"],
+            "person_count": 1,
             "current_recognized_people": [
-                {"reported_name": "Alex", "confidence": 0.99}
+                {"reported_name": "Alex", "confidence": 0.99, "track_id": "track-1"}
             ],
         }
     )
-    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    queue_empty_arrival(b)
     await b.flush_pending()
     task = b.name_task
     await task
@@ -219,11 +228,13 @@ async def test_historical_identity_does_not_name_an_unknown_entrant():
     b.identity_lookup = AsyncMock(
         return_value={
             "current_presence_verified": True,
+            "person_track_ids": ["track-1"],
+            "person_count": 1,
             "current_recognized_people": [],
             "recent_matches": [{"reported_name": "Alex"}],
         }
     )
-    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    queue_empty_arrival(b)
     await b.flush_pending()
     task = b.name_task
     await task
@@ -246,7 +257,7 @@ async def test_departure_cancels_late_name_resolution():
         return await future
 
     b.identity_lookup = waiting
-    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    queue_empty_arrival(b)
     await b.flush_pending()
     task = b.name_task
     await asyncio.sleep(0)
@@ -265,11 +276,15 @@ async def test_delayed_name_is_rechecked_after_conversation():
     b.enabled = True
     b.name_resolved = True
     b.name_observed = time.monotonic() - 11
-    b.pending = ("Hey Alex, welcome back.", time.monotonic() + 60)
+    queue_empty_arrival(b, "Hey Alex, welcome back.")
     b.identity_lookup = AsyncMock(
         return_value={
             "current_presence_verified": True,
-            "current_recognized_people": [{"reported_name": "Blair"}],
+            "person_track_ids": ["track-1"],
+            "person_count": 1,
+            "current_recognized_people": [
+                {"reported_name": "Blair", "track_id": "track-1"}
+            ],
         }
     )
     await b.flush_pending()

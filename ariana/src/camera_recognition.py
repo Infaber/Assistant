@@ -193,6 +193,7 @@ async def current_identity(client, camera, context):
                     {
                         "reported_name": match["identity"],
                         "confidence": match["confidence"],
+                        "track_id": row["id"],
                     }
                 )
         return {
@@ -200,6 +201,7 @@ async def current_identity(client, camera, context):
             if len(people) == number
             else "Some current person tracks have no reliable recognized name yet; a clear face view may be needed.",
             "current_recognized_people": people,
+            "person_track_ids": list(tracks),
             "person_count": number,
             "unknown_person_count": number - len(people),
             "current_identity_status": "empty"

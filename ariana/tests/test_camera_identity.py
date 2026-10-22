@@ -34,6 +34,8 @@ async def test_long_running_recognized_person_is_not_lost_to_history_cutoff():
     result = await current_identity(client, "bedroom", object())
     assert result["identity_now"] == "Alex" and result["current_presence_verified"]
     assert result["unknown_person_count"] == 0
+    assert result["person_track_ids"] == ["person-1"]
+    assert result["current_recognized_people"][0]["track_id"] == "person-1"
     args = client.api.get.call_args.args
     assert args[1]["in_progress"] == 1 and args[1]["include_thumbnails"] == 0
     assert "after" not in args[1]

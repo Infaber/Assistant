@@ -155,23 +155,33 @@ are ignored. Count transitions trigger neutral notifications, availability
 transitions describe the HA camera entity (not a verified RTSP diagnosis), and
 review-status transitions report a new alert. The default notification cooldown is 120 seconds. Friendly arrival greeting mode
 uses a 15-second cooldown and a three-second minimum empty interval to
-filter detection flicker. A genuine new arrival during cooldown stays pending
+filter detection flicker. It also handles increases in an already occupied room,
+such as one person becoming two. Additional arrivals wait for three seconds of
+stable count; brief count dips and recoveries do not create another greeting. A genuine new arrival during cooldown stays pending
 until it can speak, rather than being discarded. Set `ARIANA_CAMERA_GREETING_ENABLED=true` for a brief unnamed
-“Hey, welcome back” on a fresh zero-to-positive person-count transition. This
-greets anyone entering, not specifically Youssef, and does not speak on departure.
+“Hey, welcome back” on a fresh person-count increase. This greets newcomers,
+including visitors joining someone already present, and does not speak on departure.
 It still requires explicit announcement approval, which is then remembered; setup/reconnect
 baselines never generate greetings. Set `ARIANA_CAMERA_NAMED_GREETING_ENABLED=true` after authorizing recognition
 metadata to personalize greetings. Each arrival gets up to eight seconds of
 bounded current-identity checks. Only current healthy tracks with the established
-confidence threshold supply names; recent sightings never do. Unknown names
-fall back to a friendly unnamed welcome. Departure/reconnect cancels the lookup,
+confidence threshold supply names; recent sightings never do. A private, session-local
+baseline of live track IDs distinguishes newcomers from people already in the room.
+Only names attached to the newly arriving tracks enter the greeting: a recognized
+resident never supplies the name for an unknown visitor. Missing baselines, ambiguous
+track changes and unknown names fall back to a friendly unnamed welcome. Rapid
+successive arrivals awaiting speech are combined into one greeting. Startup and
+reconnect capture occupants as a baseline without greeting them; there is no continuous
+identity polling. The bounded track history stays in memory and is not saved as
+personal memory or treated as authorization. Departure/reconnect cancels the lookup,
 and names older than ten seconds are rechecked if conversation delayed playback.
 No face images or biometric templates are retrieved. A new greeting may wait for up to 60 seconds while Ariana is busy, then
 plays after three seconds of conversation quiet. Leaving, a disconnect, disabling
 speech or expiry cancels it. Reconnect baselines never create a greeting.
 The subscription diagnostic includes `last_greeting_decision` (for example
 `waiting_for_cooldown`, `conversation_busy`, `brief_detection_gap` or
-`waiting_for_identity`) so missed greetings have a concrete explanation.
+`waiting_for_identity`, `waiting_for_stable_arrival`, `arrival_count_changed` or
+`arrival_not_present`) so missed greetings have a concrete explanation.
 Failed/uncertain audio is recorded in subscription diagnostics and never blindly
 replayed. No identity, device action, memory write or tool use
 is authorized by a notification. Permission is stored in a private local
@@ -249,7 +259,12 @@ This does not turn off Frigate's own recognition. Hardware compatibility still
 needs verification on the installed runtime, regardless of image tag or version.
 
 Current identity is checked on demand, not continuously. Named arrival greetings perform bounded on-demand checks against those current
-tracks, with departure cancellation and no historical-name substitution.
+tracks, with departure cancellation and no historical-name substitution. Named
+mode also takes one bounded baseline snapshot on reconnect or announcement enable.
+A visitor leaving before playback cancels the queued greeting, even if somebody
+else remains. The sensor/track system still has limits: one person entering at the
+same instant another leaves (unchanged count) does not trigger an arrival; short
+untracked departures or tracker churn may yield no name or an unnamed greeting.
 
 ## Real-system acceptance checklist
 
