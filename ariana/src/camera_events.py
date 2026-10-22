@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import time
 from collections import deque
@@ -11,10 +12,13 @@ from urllib.parse import urlsplit, urlunsplit
 import aiohttp
 
 from camera_awareness import timestamp
+from camera_settings import CameraPermission, configured_sources
 from frigate_api import enabled, identifier
 from home_assistant import client_for
 from home_assistant_api import MAX_BYTES, HAError, configuration
 from home_assistant_index import normalized
+
+logger = logging.getLogger(__name__)
 
 
 class CameraTransitions:
@@ -92,13 +96,56 @@ class CameraEventBridge:
         self.companion = companion
         self.sources = sources
         self.speaking = False
-        self.enabled = False  # Operator config never grants spoken announcements.
+        self.permission = CameraPermission()
+        self.enabled = False
+        self.pending = None
+        self.last_permission_sync = 0.0
+        self.last_speech_error = ""
         self.transitions = CameraTransitions(
             camera=os.getenv("FRIGATE_CAMERA", "bedroom"),
             greetings=os.getenv("ARIANA_CAMERA_GREETING_ENABLED", "false").lower()
             == "true",
         )
         self.status = "connecting"
+        self.sync_permission()
+
+    def sync_permission(self):
+        self.enabled = self.permission.enabled(self.transitions.camera, self.sources)
+        self.last_permission_sync = time.monotonic()
+        if not self.enabled:
+            self.pending = None
+            if self.speaking and self.companion.speech is not None:
+                self.companion.speech.interrupt()
+
+    async def flush_pending(self):
+        if not self.pending or self.speaking:
+            return
+        text, deadline = self.pending
+        now = time.monotonic()
+        if not self.enabled or self.status != "connected" or now > deadline:
+            self.pending = None
+            return
+        if not self.idle():
+            return
+        self.pending = None  # Dispatched once; uncertain speech is never replayed.
+        if not self.transitions.can_speak(now, enabled=True, idle=True):
+            return
+        try:
+            logger.info("Camera notification dispatched without requiring a user turn")
+            await self.announce(text)
+            self.last_speech_error = ""
+        except Exception:
+            self.last_speech_error = (
+                "Greeting audio did not complete; it will not be replayed."
+            )
+            logger.warning(self.last_speech_error)
+
+    async def delivery_loop(self):
+        while not self.companion.closed:
+            if time.monotonic() - self.last_permission_sync >= 5:
+                self.sync_permission()
+            await self.flush_pending()
+            await asyncio.sleep(1)
 
     async def run(self):
         delay = 2
@@ -119,6 +166,7 @@ class CameraEventBridge:
                 TypeError,
             ):
                 self.status = "recovering"
+                self.pending = None
             if self.companion.closed or getattr(
                 self.companion, "closed_camera_events", False
             ):
@@ -171,6 +219,7 @@ class CameraEventBridge:
                 self.status = "invalid_source"
                 self.companion.closed_camera_events = True
                 return
+        self.pending = None
         self.transitions.reset()
         async with (
             aiohttp.ClientSession() as client,
@@ -210,6 +259,10 @@ class CameraEventBridge:
             if not result.get("success"):
                 raise ValueError("Subscription rejected")
             self.status = "connected"
+            logger.info(
+                "Camera event subscription connected; persistent speech enabled=%s",
+                self.enabled,
+            )
             async for message in ws:
                 if message.type != aiohttp.WSMsgType.TEXT:
                     continue
@@ -228,20 +281,34 @@ class CameraEventBridge:
                 entity = data.get("entity_id")
                 if entity not in self.sources:
                     continue
-                text = self.transitions.accept(
-                    entity, data.get("new_state"), self.sources[entity]
-                )
-                if text and self.transitions.can_speak(
-                    time.monotonic(), enabled=self.enabled, idle=self.idle()
-                ):
-                    await self.announce(text)
+                await self.observe(entity, data.get("new_state"))
+            self.status = "recovering"
+            self.pending = None
+
+    async def observe(self, entity, row):
+        if not isinstance(row, dict) or entity not in self.sources:
+            return
+        text = self.transitions.accept(entity, row, self.sources[entity])
+        accepted = self.transitions.observed.get(entity) == timestamp(
+            row.get("last_updated")
+        ) and self.transitions.states.get(entity) == row.get("state")
+        # A departure cancels an unspoken arrival. Old/out-of-order data cannot.
+        if (
+            accepted
+            and self.sources[entity] == "person"
+            and row.get("state") in {"0", "unknown", "unavailable"}
+        ):
+            self.pending = None
+        if text and self.enabled:
+            self.pending = (text, time.monotonic() + 60)
+            await self.flush_pending()
 
     def idle(self):
         c = self.companion
         return (
-            c.session.agent_state == "listening"
+            c.session.agent_state in {"idle", "listening"}
             and c.session.user_state != "speaking"
-            and time.monotonic() - c.policy.last_activity > 30
+            and time.monotonic() - c.policy.last_activity >= 3
             and not c.uploads
             and c.speech is None
         )
@@ -260,6 +327,9 @@ class CameraEventBridge:
                 allow_interruptions=True,
             )
             await c.speech
+            error = getattr(c.speech, "exception", None)
+            if callable(error) and error():
+                raise RuntimeError("Notification audio failed")
         finally:
             self.speaking = False
             c.speech = None
@@ -271,17 +341,10 @@ def start_camera_events(companion):
         or os.getenv("ARIANA_CAMERA_EVENTS_ENABLED", "false").lower() != "true"
     ):
         return None
-    sources = {
-        value: kind
-        for variable, kind in (
-            ("FRIGATE_HA_PERSON_ENTITY", "person"),
-            ("FRIGATE_HA_CAMERA_ENTITY", "availability"),
-            ("FRIGATE_HA_ALERT_ENTITY", "alert"),
-        )
-        if (value := os.getenv(variable, ""))
-    }
+    sources = configured_sources()
     if not sources:
         return None
     bridge = CameraEventBridge(companion, sources)
     companion.spawn(bridge.run())
+    companion.spawn(bridge.delivery_loop())
     return bridge

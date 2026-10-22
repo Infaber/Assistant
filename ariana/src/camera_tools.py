@@ -14,6 +14,7 @@ from action_events import observed
 from camera_awareness import camera_for, camera_name, read_camera
 from camera_delivery import schedule_delivery
 from camera_privacy import approval
+from camera_settings import CameraPermission, configured_sources
 from frigate_api import CameraError, identifier
 from frigate_api import enabled as camera_access_enabled
 
@@ -146,10 +147,13 @@ async def camera_announcements(
     context: RunContext, enabled: bool = False, confirmed: bool = False
 ) -> dict:
     """Enable event announcements or configured friendly arrival greetings after a preview and NEW explicit approval.
-    Requires an operator-configured HA event source. Off is immediate. Session-scoped;
+    Requires an operator-configured HA event source. Approval persists locally across
+    sessions/restarts for this camera and its sources. Off revokes it persistently;
     never changes recording, recognition, lights or any other device. No identity claims.
     """
     bridge = context.session.userdata.get("_camera_events")
+    camera = getattr(getattr(bridge, "transitions", None), "camera", camera_name(""))
+    sources = getattr(bridge, "sources", configured_sources())
     if not enabled:
         if bridge:
             bridge.enabled = False
@@ -159,7 +163,15 @@ async def camera_announcements(
             ):
                 bridge.companion.speech.interrupt()
         context.session.userdata.pop("_camera_consent", None)
-        return {"enabled": False, "verified": True}
+        try:
+            CameraPermission().save(False, camera, sources)
+        except OSError:
+            return {
+                "enabled": False,
+                "verified": False,
+                "error": "Stopped this session, but the saved permission could not be revoked. Disable camera access until the local settings file is writable.",
+            }
+        return {"enabled": False, "persistent": True, "verified": True}
     if not camera_access_enabled() and not context.session.userdata.get(
         "_camera_simulation"
     ):
@@ -174,13 +186,25 @@ async def camera_announcements(
         return {
             "error": "Camera event subscription is not connected. Check subscription status before enabling speech."
         }
-    if preview := approval(context, "announcements", {"enabled": True}, confirmed):
+    if preview := approval(
+        context,
+        "announcements",
+        {"enabled": True, "persistent": True, "camera": camera, "sources": sources},
+        confirmed,
+    ):
         return preview
+    try:
+        CameraPermission().save(True, camera, sources)
+    except OSError:
+        return {
+            "error": "Persistent camera speech permission could not be saved; no permission was enabled."
+        }
     bridge.enabled = True
     return {
         "enabled": True,
         "verified": True,
-        "scope": "This connected voice session only.",
+        "scope": "Saved locally for this camera and event sources until disabled.",
+        "persistent": True,
         "arrival_greetings": getattr(
             getattr(bridge, "transitions", None), "greetings", False
         ),

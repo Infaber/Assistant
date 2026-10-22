@@ -296,6 +296,9 @@ async def read_camera(context, action, camera="", entity_id="", minutes=60):
             return {
                 "subscription_state": bridge.status if bridge else "disabled",
                 "announcements_enabled": bridge.enabled if bridge else False,
+                "persistent_permission": True,
+                "greeting_pending": bool(getattr(bridge, "pending", None)),
+                "speech_error": getattr(bridge, "last_speech_error", ""),
                 "image_analysis_error": context.session.userdata.get(
                     "_camera_delivery_error"
                 ),

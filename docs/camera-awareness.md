@@ -43,7 +43,7 @@ and HA must share the broker. This upgrade does not install or modify the broker
 - “Was someone detected in my room in the last hour?” — historical detection events.
 - “Are there any recent camera alerts?” — review API; unsupported versions fail clearly.
 - “What can you see on my desk?” — asks separate permission to send one image to Gemini.
-- “Stop camera announcements.” — disables speech immediately for the session.
+- “Stop camera announcements.” — disables speech now and revokes its saved permission.
 
 Zero means Frigate reports zero detections, not proof that nobody is physically
 present. Detected people have **unknown identity**. Historical events never prove
@@ -120,8 +120,13 @@ Only provide entities that actually exist; leave unused sources blank. Sources
 are validated against Home Assistant registry provenance and camera metadata.
 Person sources must be total counts, never active-only. Announcements use the configured camera name; verify its metadata before enabling. Subscription setup alone does **not**
 authorize speech: ask “Enable camera announcements,” listen to the preview, then
-approve. Permission lasts only for the connected voice session and is lost on a
-new session. The background Mac companion needs its voice session connected. While announcements
+approve. Permission is saved locally, scoped to this camera and its discovered
+event sources, and survives voice reconnects, app restarts and Mac restarts.
+Changing camera/source configuration needs fresh approval. “Stop camera
+announcements” revokes the saved permission; other sessions notice within five
+seconds. The background companion must be running and connected to play audio;
+closing its window is fine, quitting it, explicit Pause, sleep or a network outage
+prevents live speech. No microphone input or first user message is required. While announcements
 are permitted, the existing idle voice-transport refresh keeps that connection
 available without generating speech or replaying actions.
 
@@ -134,11 +139,16 @@ review-status transitions report a new alert. There is a 120-second global speec
 cooldown. Set `ARIANA_CAMERA_GREETING_ENABLED=true` for a brief unnamed
 “Hey, welcome back” on a fresh zero-to-positive person-count transition. This
 greets anyone entering, not specifically Youssef, and does not speak on departure.
-It still requires the same session-scoped announcement approval; setup/reconnect
+It still requires explicit announcement approval, which is then remembered; setup/reconnect
 baselines never generate greetings. Named greetings need a separately verified
-live identity tied to that arrival and are not enabled by this setting. Events during active speech/recent conversation are dropped, never
-queued as stale greetings. No identity, device action, memory write or tool use
-is authorized by a notification. Alerts require the optional review-status entity;
+live identity tied to that arrival and are not enabled by this setting. A new greeting may wait for up to 60 seconds while Ariana is busy, then
+plays after three seconds of conversation quiet. Leaving, a disconnect, disabling
+speech or expiry cancels it. Reconnect baselines never create a greeting.
+Failed/uncertain audio is recorded in subscription diagnostics and never blindly
+replayed. No identity, device action, memory write or tool use
+is authorized by a notification. Permission is stored in a private local
+`camera-permission.json` beside Ariana’s preferences, with no names/images/tokens.
+A missing, corrupt or camera/source-mismatched record defaults to off. Alerts require the optional review-status entity;
 this is not a separate full Frigate review-event archive.
 
 To disable all camera access, set `ARIANA_CAMERA_ENABLED=false` and restart the
@@ -216,7 +226,8 @@ that continuous channel.
 5. Enable the subscription, then separately approve speech. Enter/leave, reconnect
    HA, repeat detections, and speak during an event. Verify neutral wording,
    baseline suppression, cooldown and no interruption. Test Mac sleep/wake and
-   network loss with the companion; no new session should retain permission.
+   network loss with the companion; saved permission should survive a new session, while reconnect baselines must not
+   announce a fictitious arrival. Disable speech, reconnect again, and confirm it stays off.
 6. Disable camera access and restart; all camera tools/subscriptions must stop.
 
 Automated tests use fake HTTP/HA services and synthetic solid-color images. They

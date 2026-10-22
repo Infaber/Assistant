@@ -68,7 +68,16 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture == "camera_recognition":
+    if fixture == "camera_persistent_greetings":
+        mocks["camera_announcements"] = lambda request: (
+            {"enabled": True, "persistent": True, "verified": True}
+            if request.get("confirmed")
+            else {
+                "requires_confirmation": True,
+                "preview": "Ask permission to save greeting speech across sessions and restarts until revoked. Wait for a new affirmative user reply.",
+            }
+        )
+    elif fixture == "camera_recognition":
         mocks["camera_status"] = lambda request: (
             {
                 "recent_matches": [{"reported_name": "Alex", "confidence": 0.98}],
@@ -325,7 +334,7 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
-    if fixture == "camera_recognition":
+    if fixture in {"camera_recognition", "camera_persistent_greetings"}:
         return
     elif fixture in {"camera_count", "camera_privacy", "camera_image"}:
         calls = ctx.job_context.primary_session.userdata["_camera_fixture_calls"]

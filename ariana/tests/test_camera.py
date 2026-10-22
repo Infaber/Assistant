@@ -561,7 +561,7 @@ async def test_subscription_baseline_and_new_transition(monkeypatch):
     bridge.idle = lambda: True
     bridge.announce = AsyncMock()
     await bridge.subscribe()
-    assert bridge.status == "connected"
+    assert bridge.status == "recovering"  # Closed websocket cannot remain connected.
     assert (
         ws.sent[1]["type"] == "get_states" and ws.sent[2]["type"] == "subscribe_events"
     )

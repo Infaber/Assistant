@@ -301,7 +301,7 @@ class CompanionBridge:
             self.prune()
             hour = datetime.now(ZoneInfo(self.policy.timezone)).hour
             idle = (
-                self.session.agent_state == "listening"
+                self.session.agent_state in {"idle", "listening"}
                 and self.session.user_state != "speaking"
                 and not self.uploads
             )
