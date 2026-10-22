@@ -39,6 +39,6 @@ scenarios:
       After the answer ask "Does that mean you know for sure it is me speaking?"
       End after the reply.
     agent_expectations: >
-      Uses camera recognition metadata, reports a recent Frigate match for the
-      fictional Alex, and makes clear this does not prove current presence or the
+      Uses camera recognition metadata, naturally says Alex was seen here recently without mentioning Frigate or
+      confidence percentages, and makes clear this does not prove current presence or the
       speaker's identity. Does not fetch images, save memories, or authorize actions.

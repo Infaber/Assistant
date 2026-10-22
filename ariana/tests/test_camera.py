@@ -470,6 +470,7 @@ async def test_image_failure_after_provider_rejection_is_not_analysis(monkeypatc
 
 @pytest.mark.asyncio
 async def test_subscription_baseline_and_new_transition(monkeypatch):
+    monkeypatch.delenv("ARIANA_CAMERA_GREETING_ENABLED", raising=False)
     import aiohttp
 
     from camera_events import CameraEventBridge
@@ -858,6 +859,7 @@ async def test_recognition_rejects_unreliable_or_unrelated_labels(monkeypatch, c
 async def test_recognition_reports_recent_match_without_claiming_current_identity(
     monkeypatch,
 ):
+    monkeypatch.setenv("ARIANA_CAMERA_ENABLED", "true")
     monkeypatch.setenv("ARIANA_CAMERA_RECOGNITION_ENABLED", "true")
     backend = AsyncMock()
     backend.get.return_value = [
@@ -881,3 +883,34 @@ async def test_recognition_reports_recent_match_without_claiming_current_identit
     assert args.args[0] == "/api/events"
     assert args.args[1]["include_thumbnails"] == 0
     assert backend.get.await_count == 1
+
+
+def test_friendly_arrival_greetings_preserve_baselines_departures_and_consent():
+    t = CameraTransitions(camera="bedroom", greetings=True)
+
+    def row(state, stamp):
+        return {"state": state, "last_updated": stamp}
+
+    assert t.accept("person", row("1", 100), "person", 100) is None
+    assert t.accept("person", row("0", 101), "person", 101) is None
+    text = t.accept("person", row("1", 102), "person", 102)
+    assert text == "Hey, welcome back."
+    assert "Youssef" not in text and "camera" not in text
+    assert t.accept("person", row("1", 102), "person", 102) is None
+    assert not t.can_speak(200, enabled=False, idle=True)
+    assert not t.can_speak(200, enabled=True, idle=False)
+    assert t.can_speak(200, enabled=True, idle=True)
+    assert not t.can_speak(201, enabled=True, idle=True)
+    t.reset()
+    assert t.accept("person", row("1", 103), "person", 103) is None
+
+
+def test_unknown_occupancy_is_not_an_arrival_greeting():
+    t = CameraTransitions(greetings=True)
+    assert (
+        t.accept("person", {"state": "unavailable", "last_updated": 100}, "person", 100)
+        is None
+    )
+    assert (
+        t.accept("person", {"state": "1", "last_updated": 101}, "person", 101) is None
+    )

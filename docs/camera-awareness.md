@@ -131,7 +131,12 @@ Initial/reconnect states are baselines, not arrivals; old/duplicate notification
 are ignored. Count transitions trigger neutral notifications, availability
 transitions describe the HA camera entity (not a verified RTSP diagnosis), and
 review-status transitions report a new alert. There is a 120-second global speech
-cooldown. Events during active speech/recent conversation are dropped, never
+cooldown. Set `ARIANA_CAMERA_GREETING_ENABLED=true` for a brief unnamed
+“Hey, welcome back” on a fresh zero-to-positive person-count transition. This
+greets anyone entering, not specifically Youssef, and does not speak on departure.
+It still requires the same session-scoped announcement approval; setup/reconnect
+baselines never generate greetings. Named greetings need a separately verified
+live identity tied to that arrival and are not enabled by this setting. Events during active speech/recent conversation are dropped, never
 queued as stale greetings. No identity, device action, memory write or tool use
 is authorized by a notification. Alerts require the optional review-status entity;
 this is not a separate full Frigate review-event archive.
@@ -178,7 +183,7 @@ unknown. At most 20 person events started in the last ten minutes are examined;
 old events, other cameras and known false positives are excluded. Events lasting
 longer than the window can be omitted even if the person remains visible. Event
 start time is **not** the time of recognition. Results are historical: Ariana may
-say “Frigate reports a recent match for Youssef,” but must not claim this proves
+say “Looks like Youssef was here recently,” but must not claim this proves
 current occupancy or who is speaking. Fresh total counts remain separate.
 
 Frigate sub-labels can also be set by administrators or classification models.

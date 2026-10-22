@@ -18,8 +18,9 @@ from home_assistant_index import normalized
 
 
 class CameraTransitions:
-    def __init__(self, cooldown=120, camera="bedroom"):
+    def __init__(self, cooldown=120, camera="bedroom", greetings=False):
         self.camera = identifier(camera)
+        self.greetings = greetings
         self.states = {}
         self.seen = deque(maxlen=256)
         self.observed = {}
@@ -65,8 +66,10 @@ class CameraTransitions:
             except ValueError:
                 return None
             if before == 0 < after:
+                if self.greetings:
+                    return "Hey, welcome back."
                 return f"Someone was newly detected by the {self.camera} camera."
-            if before > 0 == after:
+            if before > 0 == after and not self.greetings:
                 return f"The {self.camera} camera no longer detects a person."
         if kind == "availability":
             if previous not in {"unknown", "unavailable"} and state == "unavailable":
@@ -91,7 +94,9 @@ class CameraEventBridge:
         self.speaking = False
         self.enabled = False  # Operator config never grants spoken announcements.
         self.transitions = CameraTransitions(
-            camera=os.getenv("FRIGATE_CAMERA", "bedroom")
+            camera=os.getenv("FRIGATE_CAMERA", "bedroom"),
+            greetings=os.getenv("ARIANA_CAMERA_GREETING_ENABLED", "false").lower()
+            == "true",
         )
         self.status = "connecting"
 

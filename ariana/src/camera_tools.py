@@ -145,7 +145,7 @@ async def camera_snapshot(
 async def camera_announcements(
     context: RunContext, enabled: bool = False, confirmed: bool = False
 ) -> dict:
-    """Enable neutral event announcements only after a preview and NEW explicit approval.
+    """Enable event announcements or configured friendly arrival greetings after a preview and NEW explicit approval.
     Requires an operator-configured HA event source. Off is immediate. Session-scoped;
     never changes recording, recognition, lights or any other device. No identity claims.
     """
@@ -181,4 +181,7 @@ async def camera_announcements(
         "enabled": True,
         "verified": True,
         "scope": "This connected voice session only.",
+        "arrival_greetings": getattr(
+            getattr(bridge, "transitions", None), "greetings", False
+        ),
     }
