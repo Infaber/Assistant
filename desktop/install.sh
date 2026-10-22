@@ -9,8 +9,10 @@ fi
 mkdir -p "$app_root/Contents/MacOS" "$app_root/Contents/Resources"
 cd "$project_root/ariana"
 # Preserve an existing optional wake installation during ordinary upgrades.
-if [[ "${1:-}" == "--wake-word" ]] || { [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("pvporcupine") else 1)'; }; then
+if [[ "${1:-}" == "--wake-word" ]] || { [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("sherpa_onnx") or importlib.util.find_spec("pvporcupine") else 1)'; }; then
   uv sync --locked --extra wake-word
+  .venv/bin/python scripts/setup_wake_word.py
+  .venv/bin/python src/wake_word.py --check
 else
   uv sync --locked
 fi

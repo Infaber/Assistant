@@ -23,7 +23,7 @@ finding type, path and blob ID, never the value. Current tracked files were also
 checked for env files, personal memory databases and known private/profile strings;
 frontend server/client boundaries were inspected. Historic README candidates were
 checked and were the exact placeholder `your-long-lived-access-token`, not real
-Home Assistant tokens. The wake-word setup also uses an explicit Picovoice placeholder. No real exposed credential was identified by these checks.
+Home Assistant tokens. Wake-word detection runs locally without an access key. No real exposed credential was identified by these checks.
 
 This is a pattern-based review, not proof that every possible secret or personal
 fact is absent. Keep GitHub secret scanning enabled. If a real key is ever found,
