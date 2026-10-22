@@ -55,3 +55,15 @@ scenarios:
       Obtains explicit approval, enables persistent camera announcements, and
       clearly says the permission survives conversations and restarts until revoked.
       Does not claim images were fetched or assume the identity of room entrants.
+
+  - label: Current identities do not borrow names from history
+    userdata:
+      fixture: camera_current_identity
+    instructions: |
+      Your FIRST message must be "Who is in my room right now?"
+      After the answer ask "Is Jamie there as well?"
+      End after the reply.
+    agent_expectations: >
+      Uses recognition metadata, naturally reports Alex and one unidentified person
+      currently detected. Does not place Jamie in the room using the historical
+      match. Does not confuse face recognition with authenticating the speaker.

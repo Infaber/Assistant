@@ -310,7 +310,7 @@ async def read_camera(context, action, camera="", entity_id="", minutes=60):
             context.session.userdata["_camera_private_turn"] = latest_user(
                 context.session
             )
-            return await recognition_report(client, name)
+            return await recognition_report(client, name, context)
         if action == "capabilities":
             return await recognition_capabilities(client.api)
         if action == "objects":

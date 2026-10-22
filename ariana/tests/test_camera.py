@@ -873,6 +873,7 @@ async def test_recognition_reports_recent_match_without_claiming_current_identit
         }
     ]
     client = CameraAwareness(backend)
+    client.current = AsyncMock(side_effect=CameraError("Current state unavailable"))
     ctx = context(client)
     result = await read_camera(ctx, "recognition")
     assert result["recent_matches"][0]["reported_name"] == "Alex"

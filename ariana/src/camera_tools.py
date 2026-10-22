@@ -41,8 +41,9 @@ async def camera_status(
     """Read Frigate cameras/stream health, fresh HA person counts, historical events or alerts.
     Default camera is the configured bedroom. Current counts require discovered Frigate
     total person-count entities. If ambiguous ask which. Never infer identity or current
-    presence from old events. Use action=recognition for who-was-recognized questions; scored recent event
-    labels are historical evidence, not current identity or authorization. No image
+    presence from old events. Use action=recognition for who-is-in-the-room or recognition questions. Its
+    current_recognized_people require fresh count/healthy stream and matching ongoing
+    person tracks; recent_matches are historical only. No identity authorizes actions. No image
     retrieval. entity_id selects a discovered sensor.
     """
     return await read_camera(context, action, camera, entity_id, minutes)

@@ -189,12 +189,24 @@ Camera-derived memory writes are blocked for that turn.
 
 Matches require a finite **sub-label** confidence of at least 0.95. Object-detection
 confidence is never substituted. Missing, low-confidence or invalid results remain
-unknown. At most 20 person events started in the last ten minutes are examined;
-old events, other cameras and known false positives are excluded. Events lasting
-longer than the window can be omitted even if the person remains visible. Event
-start time is **not** the time of recognition. Results are historical: Ariana may
-say “Looks like Youssef was here recently,” but must not claim this proves
-current occupancy or who is speaking. Fresh total counts remain separate.
+unknown. Current identity uses a fresh discovered HA total person count, healthy
+recent camera stats and ongoing person events (`in_progress=1`, excluding
+thumbnails). Track count must match the sensor count. Ended, false-positive,
+duplicate or inconsistent tracks never establish current identity. Long-running
+ongoing tracks are eligible regardless of when they started, so staying seated
+for more than ten minutes does not hide a recognized person. Unknown people
+remain separate when only some people are recognized.
+
+`current_recognized_people` supports natural answers such as “Looks like Youssef
+is in the room.” This is a probabilistic tracked-object report, not guaranteed
+physical occupancy or speaker authentication. Camera/count/track disagreement
+returns current identity unavailable instead of guessing. Labels can lag changes
+in view until Frigate updates/ends the corresponding track.
+
+Separately, `recent_matches` reads at most 20 events started in the last ten
+minutes. These are historical only: “Looks like Youssef was here recently.” Event
+start is not recognition time. Past matches never fill in an unnamed current
+track or establish that someone is still present.
 
 Frigate sub-labels can also be set by administrators or classification models.
 An API score does not prove native face-recognition provenance. Names remain
@@ -207,9 +219,10 @@ Set the opt-in flag false and restart to stop Ariana reading recognition labels.
 This does not turn off Frigate's own recognition. Hardware compatibility still
 needs verification on the installed runtime, regardless of image tag or version.
 
-A future live-identity channel would need validated recognition-update subscriptions,
-tracked-object IDs, expiry and departures. Recent event labels do not impersonate
-that continuous channel.
+Current identity is checked on demand, not continuously. A future live-identity
+subscription for personalized arrival greetings would additionally need validated
+recognition updates, expiry and departure handling. Generic greetings do not
+automatically acquire identity from past matches.
 
 ## Real-system acceptance checklist
 
