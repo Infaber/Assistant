@@ -78,7 +78,7 @@ async def test_arrival_waits_for_conversation_to_end_instead_of_disappearing():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reason", ["expired", "disabled", "offline", "cooldown"])
+@pytest.mark.parametrize("reason", ["expired", "disabled", "offline"])
 async def test_stale_or_disallowed_greetings_are_not_replayed(reason):
     b = bridge()
     b.enabled = True
@@ -142,6 +142,7 @@ async def test_departure_cancels_queued_arrival_but_old_data_does_not():
     now = time.time()
     b.transitions.states[entity] = "0"
     b.transitions.observed[entity] = now - 3
+    b.transitions.empty_since[entity] = now - 10
     await b.observe(entity, {"state": "1", "last_updated": now - 2})
     assert b.pending
     await b.observe(entity, {"state": "0", "last_updated": now - 3})
@@ -151,3 +152,128 @@ async def test_departure_cancels_queued_arrival_but_old_data_does_not():
     b.companion.session.agent_state = "idle"
     await b.flush_pending()
     b.announce.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_second_arrival_is_retained_through_cooldown_in_same_session():
+    b = bridge()
+    b.transitions.greetings = True
+    b.transitions.cooldown = 15
+    b.enabled = True
+    entity = next(iter(b.sources))
+    now = time.time()
+    await b.observe(entity, {"state": "0", "last_updated": now - 25})
+    await b.observe(entity, {"state": "1", "last_updated": now - 20})
+    assert b.announce.await_count == 1
+    await b.observe(entity, {"state": "0", "last_updated": now - 10})
+    await b.observe(entity, {"state": "1", "last_updated": now - 5})
+    assert b.pending and b.last_decision == "waiting_for_cooldown"
+    b.transitions.last_spoken = time.monotonic() - 16
+    await b.flush_pending()
+    assert b.announce.await_count == 2
+    assert b.pending is None
+
+
+@pytest.mark.asyncio
+async def test_brief_detection_flicker_does_not_repeat_welcome():
+    b = bridge()
+    b.transitions.greetings = True
+    b.enabled = True
+    entity = next(iter(b.sources))
+    now = time.time()
+    await b.observe(entity, {"state": "1", "last_updated": now - 10})
+    await b.observe(entity, {"state": "0", "last_updated": now - 2})
+    await b.observe(entity, {"state": "1", "last_updated": now - 1})
+    b.announce.assert_not_awaited()
+    assert b.last_decision == "brief_detection_gap"
+
+
+@pytest.mark.asyncio
+async def test_fresh_verified_identity_personalizes_greeting():
+    b = bridge()
+    b.named_greetings = True
+    b.transitions.greetings = True
+    b.enabled = True
+    b.identity_lookup = AsyncMock(
+        return_value={
+            "current_presence_verified": True,
+            "current_recognized_people": [
+                {"reported_name": "Alex", "confidence": 0.99}
+            ],
+        }
+    )
+    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    await b.flush_pending()
+    task = b.name_task
+    await task
+    await b.flush_pending()
+    b.announce.assert_awaited_once_with("Hey Alex, welcome back.")
+
+
+@pytest.mark.asyncio
+async def test_historical_identity_does_not_name_an_unknown_entrant():
+    b = bridge()
+    b.named_greetings = True
+    b.transitions.greetings = True
+    b.enabled = True
+    b.identity_lookup = AsyncMock(
+        return_value={
+            "current_presence_verified": True,
+            "current_recognized_people": [],
+            "recent_matches": [{"reported_name": "Alex"}],
+        }
+    )
+    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    await b.flush_pending()
+    task = b.name_task
+    await task
+    await b.flush_pending()
+    b.announce.assert_awaited_once_with("Hey, welcome back.")
+
+
+@pytest.mark.asyncio
+async def test_departure_cancels_late_name_resolution():
+    import asyncio
+    from contextlib import suppress
+
+    b = bridge()
+    b.named_greetings = True
+    b.transitions.greetings = True
+    b.enabled = True
+    future = asyncio.get_running_loop().create_future()
+
+    async def waiting():
+        return await future
+
+    b.identity_lookup = waiting
+    b.pending = ("Hey, welcome back.", time.monotonic() + 60)
+    await b.flush_pending()
+    task = b.name_task
+    await asyncio.sleep(0)
+    b.cancel_pending("departure")
+    with suppress(asyncio.CancelledError):
+        await task
+    assert b.pending is None
+    b.announce.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delayed_name_is_rechecked_after_conversation():
+    b = bridge()
+    b.named_greetings = True
+    b.transitions.greetings = True
+    b.enabled = True
+    b.name_resolved = True
+    b.name_observed = time.monotonic() - 11
+    b.pending = ("Hey Alex, welcome back.", time.monotonic() + 60)
+    b.identity_lookup = AsyncMock(
+        return_value={
+            "current_presence_verified": True,
+            "current_recognized_people": [{"reported_name": "Blair"}],
+        }
+    )
+    await b.flush_pending()
+    task = b.name_task
+    await task
+    await b.flush_pending()
+    b.announce.assert_awaited_once_with("Hey Blair, welcome back.")

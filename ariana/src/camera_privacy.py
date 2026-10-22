@@ -53,7 +53,7 @@ def approval(context, operation, payload, confirmed):
     disclosure = (
         "send one camera image to Google Gemini for this question"
         if operation == "snapshot"
-        else "enable camera announcements and configured greetings across sessions and restarts until you ask to stop them"
+        else "enable camera announcements and configured greetings, including freshly recognized names when configured, across sessions and restarts until you ask to stop them"
     )
     return {
         "requires_confirmation": True,

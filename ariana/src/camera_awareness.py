@@ -325,6 +325,13 @@ async def read_camera(context, action, camera="", entity_id="", minutes=60):
                 "persistent_permission": True,
                 "greeting_pending": bool(getattr(bridge, "pending", None)),
                 "speech_error": getattr(bridge, "last_speech_error", ""),
+                "last_greeting_decision": getattr(
+                    bridge, "last_decision", "not_connected"
+                ),
+                "named_greetings": getattr(bridge, "named_greetings", False),
+                "cooldown_seconds": getattr(
+                    getattr(bridge, "transitions", None), "cooldown", None
+                ),
                 "image_analysis_error": context.session.userdata.get(
                     "_camera_delivery_error"
                 ),

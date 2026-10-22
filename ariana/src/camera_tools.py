@@ -150,7 +150,8 @@ async def camera_announcements(
     """Enable event announcements or configured friendly arrival greetings after a preview and NEW explicit approval.
     Requires an operator-configured HA event source. Approval persists locally across
     sessions/restarts for this camera and its sources. Off revokes it persistently;
-    never changes recording, recognition, lights or any other device. No identity claims.
+    never changes recording, recognition, lights or any other device. Names require
+    a fresh verified track and never authorize actions.
     """
     bridge = context.session.userdata.get("_camera_events")
     camera = getattr(getattr(bridge, "transitions", None), "camera", camera_name(""))
@@ -158,6 +159,9 @@ async def camera_announcements(
     if not enabled:
         if bridge:
             bridge.enabled = False
+            cancel = getattr(bridge, "cancel_pending", None)
+            if callable(cancel):
+                cancel("permission_disabled")
             if (
                 getattr(bridge, "speaking", False)
                 and bridge.companion.speech is not None
@@ -190,7 +194,13 @@ async def camera_announcements(
     if preview := approval(
         context,
         "announcements",
-        {"enabled": True, "persistent": True, "camera": camera, "sources": sources},
+        {
+            "enabled": True,
+            "persistent": True,
+            "camera": camera,
+            "sources": sources,
+            "named_greetings": getattr(bridge, "named_greetings", False),
+        },
         confirmed,
     ):
         return preview
@@ -206,6 +216,7 @@ async def camera_announcements(
         "verified": True,
         "scope": "Saved locally for this camera and event sources until disabled.",
         "persistent": True,
+        "named_greetings": getattr(bridge, "named_greetings", False),
         "arrival_greetings": getattr(
             getattr(bridge, "transitions", None), "greetings", False
         ),

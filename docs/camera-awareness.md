@@ -153,15 +153,25 @@ bounded reconnect backoff. It does not continuously poll Frigate or fetch images
 Initial/reconnect states are baselines, not arrivals; old/duplicate notifications
 are ignored. Count transitions trigger neutral notifications, availability
 transitions describe the HA camera entity (not a verified RTSP diagnosis), and
-review-status transitions report a new alert. There is a 120-second global speech
-cooldown. Set `ARIANA_CAMERA_GREETING_ENABLED=true` for a brief unnamed
+review-status transitions report a new alert. The default notification cooldown is 120 seconds. Friendly arrival greeting mode
+uses a 15-second cooldown and a three-second minimum empty interval to
+filter detection flicker. A genuine new arrival during cooldown stays pending
+until it can speak, rather than being discarded. Set `ARIANA_CAMERA_GREETING_ENABLED=true` for a brief unnamed
 “Hey, welcome back” on a fresh zero-to-positive person-count transition. This
 greets anyone entering, not specifically Youssef, and does not speak on departure.
 It still requires explicit announcement approval, which is then remembered; setup/reconnect
-baselines never generate greetings. Named greetings need a separately verified
-live identity tied to that arrival and are not enabled by this setting. A new greeting may wait for up to 60 seconds while Ariana is busy, then
+baselines never generate greetings. Set `ARIANA_CAMERA_NAMED_GREETING_ENABLED=true` after authorizing recognition
+metadata to personalize greetings. Each arrival gets up to eight seconds of
+bounded current-identity checks. Only current healthy tracks with the established
+confidence threshold supply names; recent sightings never do. Unknown names
+fall back to a friendly unnamed welcome. Departure/reconnect cancels the lookup,
+and names older than ten seconds are rechecked if conversation delayed playback.
+No face images or biometric templates are retrieved. A new greeting may wait for up to 60 seconds while Ariana is busy, then
 plays after three seconds of conversation quiet. Leaving, a disconnect, disabling
 speech or expiry cancels it. Reconnect baselines never create a greeting.
+The subscription diagnostic includes `last_greeting_decision` (for example
+`waiting_for_cooldown`, `conversation_busy`, `brief_detection_gap` or
+`waiting_for_identity`) so missed greetings have a concrete explanation.
 Failed/uncertain audio is recorded in subscription diagnostics and never blindly
 replayed. No identity, device action, memory write or tool use
 is authorized by a notification. Permission is stored in a private local
@@ -238,10 +248,8 @@ Set the opt-in flag false and restart to stop Ariana reading recognition labels.
 This does not turn off Frigate's own recognition. Hardware compatibility still
 needs verification on the installed runtime, regardless of image tag or version.
 
-Current identity is checked on demand, not continuously. A future live-identity
-subscription for personalized arrival greetings would additionally need validated
-recognition updates, expiry and departure handling. Generic greetings do not
-automatically acquire identity from past matches.
+Current identity is checked on demand, not continuously. Named arrival greetings perform bounded on-demand checks against those current
+tracks, with departure cancellation and no historical-name substitution.
 
 ## Real-system acceptance checklist
 

@@ -70,7 +70,12 @@ def configure_simulation_tools(
     )
     if fixture == "camera_persistent_greetings":
         mocks["camera_announcements"] = lambda request: (
-            {"enabled": True, "persistent": True, "verified": True}
+            {
+                "enabled": True,
+                "persistent": True,
+                "named_greetings": True,
+                "verified": True,
+            }
             if request.get("confirmed")
             else {
                 "requires_confirmation": True,

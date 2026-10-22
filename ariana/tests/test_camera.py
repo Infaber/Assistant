@@ -895,10 +895,10 @@ def test_friendly_arrival_greetings_preserve_baselines_departures_and_consent():
 
     assert t.accept("person", row("1", 100), "person", 100) is None
     assert t.accept("person", row("0", 101), "person", 101) is None
-    text = t.accept("person", row("1", 102), "person", 102)
+    text = t.accept("person", row("1", 106), "person", 106)
     assert text == "Hey, welcome back."
     assert "Youssef" not in text and "camera" not in text
-    assert t.accept("person", row("1", 102), "person", 102) is None
+    assert t.accept("person", row("1", 106), "person", 106) is None
     assert not t.can_speak(200, enabled=False, idle=True)
     assert not t.can_speak(200, enabled=True, idle=False)
     assert t.can_speak(200, enabled=True, idle=True)
