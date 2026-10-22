@@ -155,16 +155,46 @@ must not be assumed compatible with an ARM64 Apple Silicon Docker image. Older
 and current documentation have different requirements/defaults. Check your exact
 release before enabling; no replacement recognition service was added.
 
-`camera_recognition.py` defines a disabled-by-default confidence policy and a
-future consent-bound native enrollment/removal interface. It is intentionally not
-an executable enrollment tool. Person events ignore native `sub_label` identities.
-If native recognition is supported, enrollment/removal remain explicit operations
-in Frigate's local Face Library UI; review its own retention/training settings.
-No automatic enrollment or biometric personal memory is permitted.
+### Let Ariana read recognition results
 
-Next implementation step: verify local native recognition support, then implement
-an explicit enrollment/removal adapter with single-use consent and native
-confidence provenance. Do not infer a confidence score from a name-only sub-label.
+After configuring and testing Frigate locally, explicitly opt in in private
+`ariana/.env.local`:
+
+```dotenv
+ARIANA_CAMERA_RECOGNITION_ENABLED=true
+```
+
+Restart Ariana and ask “Has Frigate recognized me?” or “Who did the bedroom
+camera recognize?” `camera_status(action="recognition")` reads only person-event
+metadata from the authenticated API, excluding thumbnails. No face image,
+embedding or enrollment data is retrieved. Reported names and confidence become
+conversation data sent to Ariana's existing Gemini model. Explicitly authorize
+this transfer before enabling it; this is not fully local conversation processing.
+Camera-derived memory writes are blocked for that turn.
+
+Matches require a finite **sub-label** confidence of at least 0.95. Object-detection
+confidence is never substituted. Missing, low-confidence or invalid results remain
+unknown. At most 20 person events started in the last ten minutes are examined;
+old events, other cameras and known false positives are excluded. Events lasting
+longer than the window can be omitted even if the person remains visible. Event
+start time is **not** the time of recognition. Results are historical: Ariana may
+say “Frigate reports a recent match for Youssef,” but must not claim this proves
+current occupancy or who is speaking. Fresh total counts remain separate.
+
+Frigate sub-labels can also be set by administrators or classification models.
+An API score does not prove native face-recognition provenance. Names remain
+untrusted data and never authenticate a user, approve a write, unlock anything or
+change existing confirmation requirements. No automatic identity enrollment or
+biometric memory storage is added. Enrollment/removal stay manual in Frigate's
+local Face Library UI, with its own retention settings.
+
+Set the opt-in flag false and restart to stop Ariana reading recognition labels.
+This does not turn off Frigate's own recognition. Hardware compatibility still
+needs verification on the installed runtime, regardless of image tag or version.
+
+A future live-identity channel would need validated recognition-update subscriptions,
+tracked-object IDs, expiry and departures. Recent event labels do not impersonate
+that continuous channel.
 
 ## Real-system acceptance checklist
 

@@ -5,7 +5,7 @@ import os
 import time
 from datetime import datetime
 
-from camera_recognition import recognition_capabilities
+from camera_recognition import recognition_capabilities, recognition_report
 from frigate_api import CameraError, FrigateAPI, enabled, identifier
 from home_assistant import client_for
 from home_assistant_api import HAError
@@ -301,6 +301,13 @@ async def read_camera(context, action, camera="", entity_id="", minutes=60):
                 ),
                 "verified": True,
             }
+        if action == "recognition":
+            from camera_delivery import latest_user
+
+            context.session.userdata["_camera_private_turn"] = latest_user(
+                context.session
+            )
+            return await recognition_report(client, name)
         if action == "capabilities":
             return await recognition_capabilities(client.api)
         if action == "objects":

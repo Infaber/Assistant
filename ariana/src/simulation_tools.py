@@ -68,7 +68,18 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture in {"camera_count", "camera_privacy", "camera_image"}:
+    if fixture == "camera_recognition":
+        mocks["camera_status"] = lambda request: (
+            {
+                "recent_matches": [{"reported_name": "Alex", "confidence": 0.98}],
+                "historical": True,
+                "identity_now": "unknown",
+                "verified": True,
+            }
+            if request.get("action") == "recognition"
+            else {"error": "Use recognition metadata"}
+        )
+    elif fixture in {"camera_count", "camera_privacy", "camera_image"}:
         from camera_simulation import fixture_camera
 
         fixture_camera(session)
@@ -314,7 +325,9 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
-    if fixture in {"camera_count", "camera_privacy", "camera_image"}:
+    if fixture == "camera_recognition":
+        return
+    elif fixture in {"camera_count", "camera_privacy", "camera_image"}:
         calls = ctx.job_context.primary_session.userdata["_camera_fixture_calls"]
         images = [path for path in calls if path.endswith(".jpg")]
         if fixture in {"camera_count", "camera_privacy"} and images:
