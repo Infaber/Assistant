@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { LocalParticipant } from "livekit-client";
+import { assistantName } from "../lib/persona";
 import { ArrowUp, FileText, LoaderCircle, Paperclip, X } from "lucide-react";
 import {
   ACCEPT_FILES,
@@ -225,7 +226,7 @@ export default function SharingComposer({
         <div className="upload-status" role="status">
           {progress < 1
             ? `Sharing files · ${Math.round(progress * 100)}%`
-            : "Waiting for Ariana’s receipt…"}
+            : `Waiting for ${assistantName}’s receipt…`}
         </div>
       )}
       <form
@@ -271,7 +272,7 @@ export default function SharingComposer({
                 ? "Or type a message…"
                 : "Enter a message…"
           }
-          aria-label="Message Ariana"
+          aria-label={`Message ${assistantName}`}
           maxLength={4000}
         />
         <button

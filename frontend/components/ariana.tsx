@@ -33,6 +33,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
+import { assistantName } from "../lib/persona";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
 import { useThinkingFeedback } from "./use-thinking-feedback";
 
@@ -220,11 +221,11 @@ function Workspace({
         : agent.state === "failed"
           ? "Agent unavailable"
           : agent.state === "speaking"
-            ? "Ariana is speaking"
+            ? `${assistantName} is speaking`
             : agent.state === "thinking"
               ? "Thinking it through"
               : !agent.isConnected
-                ? "Finding Ariana"
+                ? `Finding ${assistantName}`
                 : isMicrophoneEnabled
                   ? "Listening to you"
                   : "Ready for your message";
@@ -624,7 +625,7 @@ function Workspace({
         conversation
           .map(
             (message) =>
-              `${message.isAgent ? "Ariana" : "You"}: ${message.message}${message.files.length ? "\nAttachments: " + message.files.map((file) => file.name).join(", ") : ""}`,
+              `${message.isAgent ? assistantName : "You"}: ${message.message}${message.files.length ? "\nAttachments: " + message.files.map((file) => file.name).join(", ") : ""}`,
           )
           .join("\n\n"),
       );
@@ -653,7 +654,7 @@ function Workspace({
     error ||
     providerError ||
     (connected && agent.state === "failed"
-      ? "Ariana has not joined. Check the agent, then reconnect."
+      ? `${assistantName} has not joined. Check the agent, then reconnect.`
       : "");
   return (
     <main
@@ -675,15 +676,15 @@ function Workspace({
         }
       }}
     >
-      <h1 className="sr-only">Ariana</h1>
+      <h1 className="sr-only">{assistantName}</h1>
       <div className="orb-center">
         <button
           className="orb-touch"
           aria-label={
             connected
-              ? "Message Ariana"
+              ? `Message ${assistantName}`
               : connecting
-                ? "Connecting to Ariana"
+                ? `Connecting to ${assistantName}`
                 : "Start conversation"
           }
           onClick={() => {
@@ -748,7 +749,7 @@ function Workspace({
           <Settings2 size={19} />
         </button>
       </div>
-      <StartAudio label="Enable Ariana’s audio" className="enable-audio" />
+      <StartAudio label={`Enable ${assistantName}’s audio`} className="enable-audio" />
       {issue && (
         <div className="error-banner" role="alert">
           <p>{issue}</p>
@@ -823,7 +824,7 @@ function Workspace({
         }}
       >
         <header>
-          <h2 id="settings-title">Ariana</h2>
+          <h2 id="settings-title">{assistantName}</h2>
           <button
             className="icon-button"
             aria-label="Close settings"
@@ -869,7 +870,7 @@ function Workspace({
           />
         </label>
         <p className="settings-help">
-          Tap Ariana to begin. Tap again, type, or press ⌘K to write. Paste or
+          Tap {assistantName} to begin. Tap again, type, or press ⌘K to write. Paste or
           drop pictures and files.
         </p>
         <div className="session-settings">
@@ -983,7 +984,7 @@ function Workspace({
           )}
           {conversation.map((message) => (
             <article className="message" key={message.id}>
-              <small>{message.isAgent ? "Ariana" : "You"}</small>
+              <small>{message.isAgent ? assistantName : "You"}</small>
               <p>{message.message}</p>
               {message.files.map((file, index) => (
                 <div className="shared-file" key={index}>

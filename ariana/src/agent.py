@@ -25,7 +25,7 @@ from home_assistant_tools import (
     home_assistant_get_state,
     home_assistant_inventory,
 )
-from instructions import ARIANA_INSTRUCTIONS
+from instructions import configured_instructions
 from mac_tools import mac_control
 from memory_tools import memory_context, memory_manage
 from model_config import realtime_model
@@ -101,7 +101,7 @@ class Assistant(Agent):
                 task_status,
                 browser or BrowserToolset(),
             ],
-            instructions=ARIANA_INSTRUCTIONS + saved_context,
+            instructions=configured_instructions() + saved_context,
         )
 
 

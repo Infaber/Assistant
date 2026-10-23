@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { assistantName } from '../lib/persona';
 
 export const metadata: Metadata = {
-  title: 'Ariana — Your personal assistant',
-  description: 'Ariana. A quiet presence. Speak, create and get things done.',
+  title: `${assistantName} — Your personal assistant`,
+  description: `${assistantName}. A quiet presence. Speak, create and get things done.`,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -84,3 +84,36 @@ user requests and reversible test data.
 These results do not verify custom wake recognition, login/reboot, TCC microphone
 prompts, speaker echo or physical sleep/Wi-Fi recovery. Those require installation
 and real Mac acceptance tests; the currently running old companion was left intact.
+
+## Temporary Jarvis demo
+
+`ARIANA_PERSONA=jarvis` changes only conversational presentation to Jarvis with a
+restrained British male style. The demo uses Gemini's `Charon` preset, not the
+original Paul Bettany movie voice. Shared tool, privacy and approval instructions
+are unchanged. The default remains Ariana; no additional voice service is required.
+
+With the companion stopped, run from the repository root:
+
+```sh
+ariana/.venv/bin/python ariana/scripts/demo_persona.py jarvis
+(cd frontend && npm run build)
+open "$HOME/Applications/Ariana.app"
+```
+
+This sets the private backend voice/persona and public frontend display name. When
+the free wake model is installed, it locally configures the phrase **Jarvis**.
+Only the previous presentation settings and keyword tokens are backed up, in a
+private `~/Library/Application Support/Ariana/demo-persona.json` file. Credentials
+are never copied to that backup. Existing app names and service IDs remain Ariana
+so the demo does not create duplicate services or a second installation.
+
+To return to the exact previous voice, name and wake phrase, stop the companion:
+
+```sh
+ariana/.venv/bin/python ariana/scripts/demo_persona.py restore
+(cd frontend && npm run build)
+open "$HOME/Applications/Ariana.app"
+```
+
+`NEXT_PUBLIC_ASSISTANT_NAME` is presentation only and requires a frontend rebuild.
+Never put credentials in a `NEXT_PUBLIC_` variable.

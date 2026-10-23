@@ -14,7 +14,7 @@ test("orb is the main screen, typing reveals input, and mobile fits", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(page.locator("canvas")).toBeVisible();
-  await expect(page.getByLabel("Message Ariana", { exact: true })).toBeHidden();
+  await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true })).toBeHidden();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator("aside")).toHaveCount(0);
   await expect
@@ -25,14 +25,14 @@ test("orb is the main screen, typing reveals input, and mobile fits", async ({
     )
     .toBeGreaterThan(400);
   await page.keyboard.press("h");
-  await expect(page.getByLabel("Message Ariana", { exact: true })).toHaveValue(
+  await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true })).toHaveValue(
     "h",
   );
   await expect(
-    page.getByLabel("Message Ariana", { exact: true }),
+    page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
-  await expect(page.getByLabel("Message Ariana", { exact: true })).toBeHidden();
+  await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true })).toBeHidden();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -186,10 +186,10 @@ test("unsupported attachments report errors and check-ins stay in settings", asy
   );
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(
-    page.getByRole("switch", { name: "Let Ariana start conversations" }),
+    page.getByRole("switch", { name: /^Let (?:Ariana|Jarvis) start conversations$/ }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("switch", { name: "Let Ariana start conversations" }),
+    page.getByRole("switch", { name: /^Let (?:Ariana|Jarvis) start conversations$/ }),
   ).toHaveAttribute("aria-checked", "false");
 });
 test("native companion auto-connects without opening the microphone", async ({
@@ -216,7 +216,7 @@ test("native companion auto-connects without opening the microphone", async ({
     page.getByRole("region", { name: "Proactive check-ins" }),
   ).toContainText("Close the window");
   await expect(
-    page.getByRole("switch", { name: "Let Ariana start conversations" }),
+    page.getByRole("switch", { name: /^Let (?:Ariana|Jarvis) start conversations$/ }),
   ).toHaveAttribute("aria-checked", "true");
 });
 test("reduced motion produces a stable orb and voice cues decode", async ({
@@ -266,7 +266,11 @@ test("keyboard can activate the orb without the typing shortcut stealing Enter",
     });
   });
   await page.goto("/");
+  // The canvas starts in a React effect. Wait for hydration before assigning
+  // programmatic focus, which WebKit can otherwise lose during the first mount.
+  await expect.poll(() => page.locator("canvas").evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(400);
   await page.locator(".orb-touch").focus();
+  await expect(page.locator(".orb-touch")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator(".error-banner")).toContainText(
     "Keyboard connection test",

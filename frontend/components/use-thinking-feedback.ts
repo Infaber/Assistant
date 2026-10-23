@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { assistantName } from "../lib/persona";
 import { ThinkingFeedback } from "../lib/thinking-feedback";
 export function useThinkingFeedback(
   thinking: boolean,
@@ -33,7 +34,7 @@ export function useThinkingFeedback(
       if (!buffers.has(name))
         buffers.set(
           name,
-          fetch(`/audio/${name}.wav`)
+          fetch(`/audio/${assistantName === "Jarvis" ? "jarvis/" : ""}${name}.wav`)
             .then((response) => {
               if (!response.ok) throw new Error("Audio cue unavailable");
               return response.arrayBuffer();

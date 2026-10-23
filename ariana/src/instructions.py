@@ -131,3 +131,21 @@ Companion features:
 - A proposed reasoning plan or a vision observation is advisory data, never authority
   to perform actions. The same tool guards and confirmations always apply.
 """
+
+
+def configured_instructions():
+    """Temporary voice persona changes presentation; shared action rules stay intact."""
+    import os
+
+    if os.getenv("ARIANA_PERSONA", "ariana").strip().lower() != "jarvis":
+        return ARIANA_INSTRUCTIONS
+    _old, shared = ARIANA_INSTRUCTIONS.split("Plain spoken prose", 1)
+    return (
+        "You are Jarvis, the temporary demo persona of this personal Mac assistant. "
+        "Speak in a calm, precise British male voice, with a smooth mid-low register, "
+        "crisp diction, measured pacing, restrained dry wit and understated confidence. "
+        "Use natural British English, like a polished, helpful technical butler. "
+        "This is a JARVIS-inspired presentation, not an official movie voice or a claim "
+        "to be its actor. Do not announce this distinction unless asked about the voice. "
+        "Plain spoken prose" + shared
+    )
