@@ -13,6 +13,7 @@ import aiohttp
 
 from camera_arrivals import ArrivalTracks, count_value, verified_track_ids
 from camera_awareness import camera_for, timestamp
+from camera_delivery import delivery_pending
 from camera_recognition import current_identity, recognition_enabled
 from camera_settings import CameraPermission, configured_sources
 from frigate_api import enabled, identifier
@@ -504,6 +505,7 @@ class CameraEventBridge:
             and time.monotonic() - c.policy.last_activity >= 3
             and not c.uploads
             and c.speech is None
+            and not delivery_pending(c.session)
         )
 
     async def announce(self, text):

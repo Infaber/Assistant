@@ -282,3 +282,37 @@ def test_transport_handoffs_do_not_reset_the_idle_timer():
     b.on_message(SimpleNamespace(item=SimpleNamespace(type="agent_handoff")))
     assert b.policy.last_activity == 123
     assert b.policy.awaiting_user
+
+
+@pytest.mark.asyncio
+async def test_idle_refresh_and_check_in_do_not_preempt_snapshot(monkeypatch):
+    import time
+
+    import companion
+
+    b = bridge()
+    b.session.agent_state = "idle"
+    b.session.user_state = "away"
+    b.policy.configure(settings(quiet_start=0, quiet_end=0), time.monotonic())
+    b.policy.last_activity = time.monotonic() - 500
+    b.last_refresh = time.monotonic() - 500
+    b.refresh_agent = Mock()
+    b.session.update_agent = Mock()
+    pending = asyncio.get_running_loop().create_future()
+    b.session.userdata["_camera_delivery"] = pending
+    b.session.userdata["_camera_events"] = SimpleNamespace(
+        enabled=True, status="connected"
+    )
+    calls = 0
+
+    async def tick(_):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            b.closed = True
+
+    monkeypatch.setattr(companion.asyncio, "sleep", tick)
+    await b.check_in_loop()
+    b.session.update_agent.assert_not_called()
+    b.session.generate_reply.assert_not_called()
+    pending.cancel()

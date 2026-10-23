@@ -106,7 +106,11 @@ cue, then a bounded session-scoped delivery task sends the approved picture thro
 the existing Gemini Live multimodal context and generates its description with
 all action tools removed. There is no second model or continuous video pipeline.
 A newer user turn, interruption before delivery or session closure cancels the
-pending upload. Failures are exposed through camera subscription/status diagnostics.
+pending upload. While a delivery is pending, automatic greetings, check-ins and idle
+transport refresh wait for it instead of superseding its generation. Camera
+subscription/status diagnostics expose `image_analysis_state` (prepared, waiting
+for the tool turn, submitting, analyzing, completed, cancelled or failed) and
+redacted errors. Status never includes image bytes, private questions or credentials.
 
 The tool confirms image preparation, **not analysis or upload**. Ariana must
 inspect it before describing content and acknowledge ambiguity. Failed delivery

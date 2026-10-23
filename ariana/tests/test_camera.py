@@ -916,3 +916,34 @@ def test_unknown_occupancy_is_not_an_arrival_greeting():
     assert (
         t.accept("person", {"state": "1", "last_updated": 101}, "person", 101) is None
     )
+
+
+@pytest.mark.asyncio
+async def test_image_analysis_status_distinguishes_cancellation_from_failure():
+    from camera_delivery import schedule_delivery
+
+    ctx = context()
+    schedule_delivery(ctx, normalized_snapshot(jpeg()), "bedroom", "desk", False)
+    task = ctx.session.userdata["_camera_delivery"]
+    reply(ctx)
+    ctx.speech_handle.set_result(None)
+    await task
+    assert ctx.session.userdata["_camera_delivery_status"] == "cancelled_before_upload"
+    assert "_camera_delivery_error" not in ctx.session.userdata
+
+
+@pytest.mark.asyncio
+async def test_background_greeting_waits_for_image_analysis():
+    from test_camera_background import bridge
+
+    b = bridge()
+    upload = asyncio.get_running_loop().create_future()
+    b.companion.session.userdata = {"_camera_delivery": upload}
+    b.enabled = True
+    b.pending = ("Hello", time.monotonic() + 60)
+    await b.flush_pending()
+    assert b.pending and b.last_decision == "conversation_busy"
+    b.announce.assert_not_awaited()
+    upload.set_result(None)
+    await b.flush_pending()
+    b.announce.assert_awaited_once_with("Hello")

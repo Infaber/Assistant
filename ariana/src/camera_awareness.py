@@ -332,6 +332,9 @@ async def read_camera(context, action, camera="", entity_id="", minutes=60):
                 "cooldown_seconds": getattr(
                     getattr(bridge, "transitions", None), "cooldown", None
                 ),
+                "image_analysis_state": context.session.userdata.get(
+                    "_camera_delivery_status", "idle"
+                ),
                 "image_analysis_error": context.session.userdata.get(
                     "_camera_delivery_error"
                 ),

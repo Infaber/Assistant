@@ -11,6 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from attachments import MAX_FILE_BYTES, MAX_FILES, MAX_SESSION_FILES, decode_attachment
+from camera_delivery import delivery_pending
 from camera_events import start_camera_events
 
 logger = logging.getLogger(__name__)
@@ -304,6 +305,7 @@ class CompanionBridge:
                 self.session.agent_state in {"idle", "listening"}
                 and self.session.user_state != "speaking"
                 and not self.uploads
+                and not delivery_pending(self.session)
             )
             now = time.monotonic()
             camera_events = self.session.userdata.get("_camera_events")
