@@ -217,7 +217,7 @@ test("native companion auto-connects without opening the microphone", async ({
   ).toContainText("Close the window");
   await expect(
     page.getByRole("switch", { name: /^Let (?:Ariana|Jarvis) start conversations$/ }),
-  ).toHaveAttribute("aria-checked", "true");
+  ).toHaveAttribute("aria-checked", "false");
 });
 test("reduced motion produces a stable orb and voice cues decode", async ({
   page,

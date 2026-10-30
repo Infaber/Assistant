@@ -6,8 +6,10 @@ import logging
 import os
 import time
 from collections import deque
+from datetime import datetime
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 import aiohttp
 
@@ -20,6 +22,7 @@ from frigate_api import enabled, identifier
 from home_assistant import client_for
 from home_assistant_api import MAX_BYTES, HAError, configuration
 from home_assistant_index import normalized
+from personality import proactive_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +241,13 @@ class CameraEventBridge:
                 if self.status != "connected"
                 else "expired"
             )
+            return
+        quiet = getattr(self.companion.policy, "quiet_at", None)
+        if not proactive_allowed(self.companion.session) or (
+            callable(quiet)
+            and quiet(datetime.now(ZoneInfo(self.companion.policy.timezone)).hour)
+        ):
+            self.cancel_pending("quiet_hours_or_initiative_off")
             return
         if self.pending_arrival is not None:
             arrival = self.pending_arrival

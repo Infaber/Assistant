@@ -60,3 +60,5 @@ jobs:
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-home-assistant.yaml
       - name: Check camera consent and current detection using fictional fixtures
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-camera.yaml
+      - name: Check companionship and typed memory with fictional conversations
+        run: lk agent simulate text --concurrency 1 --scenarios scenarios-companionship.yaml

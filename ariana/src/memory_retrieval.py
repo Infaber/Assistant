@@ -66,11 +66,12 @@ RELATED = {
 
 def tokens(text: str) -> set[str]:
     normalized = text.casefold().replace("home assistant", "homeassistant")
-    return {
+    words = {
         word
         for word in re.findall(r"[^\W_]+", normalized)
         if len(word) > 1 and word not in STOP
     }
+    return words | {word[:-1] for word in words if len(word) > 4 and word.endswith("s")}
 
 
 def relevant_memories(

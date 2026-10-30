@@ -11,9 +11,11 @@ from pathlib import Path
 from livekit.agents import RunContext, function_tool
 
 from action_events import observed
+from personality import STYLE_CHOICES, replace_style
 
 _LOCK = threading.Lock()
 CHOICES = {
+    **STYLE_CHOICES,
     "default_browser": {
         "Safari",
         "Google Chrome",
@@ -25,6 +27,7 @@ CHOICES = {
     "units": {"metric", "imperial"},
 }
 LIMITS = {
+    **dict.fromkeys(STYLE_CHOICES, 12),
     "display_name": 100,
     "home_city": 150,
     "default_browser": 30,
@@ -49,7 +52,7 @@ def preferences_path() -> Path:
 def normalize(key: str, value: str) -> str:
     if key not in LIMITS:
         raise ValueError(
-            "Choose display_name, home_city, default_browser, reply_style or units."
+            "Choose a supported personal or conversational style preference."
         )
     value = value.strip()
     if not value or len(value) > LIMITS[key] or any(ord(c) < 32 for c in value):
@@ -147,7 +150,10 @@ async def preferences_manage(
     context: RunContext, action: str, key: str = "", value: str = ""
 ) -> dict:
     """Remember, recall or forget only user-requested personal preferences.
-    Keys: display_name, home_city, default_browser, reply_style, units.
+    Keys: display_name, home_city, default_browser, reply_style, units, warmth,
+    playfulness, sarcasm, initiative, talkativeness. Style values: warmth low/balanced/high;
+    playfulness off/subtle/playful; sarcasm off/gentle; initiative off/low/balanced;
+    talkativeness brief/adaptive/expansive. Style changes apply in this conversation.
     Browser choices Safari/Chrome/Edge/Brave/Firefox; reply_style brief/normal/detailed;
     units metric/imperial. recall with no key lists saved preferences. Remember or
     forget requires an explicit user request; never infer or save preferences from
@@ -171,9 +177,23 @@ async def preferences_manage(
         except ValueError:
             state = {}
         backend = state.get("_preferences_simulator") or PreferencesStore().run
-        return await asyncio.to_thread(
+        result = await asyncio.to_thread(
             backend, {"action": action, "key": key, "value": value}
         )
+        if key in STYLE_CHOICES and action != "recall" and result.get("success"):
+            state["_personality_preferences"] = result["preferences"]
+            try:
+                agent = context.session.current_agent
+                await agent.update_instructions(
+                    replace_style(agent.instructions, result["preferences"])
+                )
+                result["applied_this_session"] = True
+            except Exception:
+                result["applied_this_session"] = False
+                result["guidance"] = (
+                    "Saved; reconnect to apply the style if the voice session could not update."
+                )
+        return result
     except (OSError, ValueError):
         return {
             "error": "Could not read or save that preference. Check the value and local settings file; existing data was preserved."

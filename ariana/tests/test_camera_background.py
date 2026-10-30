@@ -292,3 +292,26 @@ async def test_delayed_name_is_rechecked_after_conversation():
     await task
     await b.flush_pending()
     b.announce.assert_awaited_once_with("Hey Blair, welcome back.")
+
+
+@pytest.mark.asyncio
+async def test_initiative_off_suppresses_pending_greeting():
+    b = bridge()
+    b.enabled = True
+    b.companion.session.userdata = {"_personality_preferences": {"initiative": "off"}}
+    b.pending = ("Hello", time.monotonic() + 60)
+    await b.flush_pending()
+    b.announce.assert_not_awaited()
+    assert b.pending is None and b.last_decision == "quiet_hours_or_initiative_off"
+
+
+@pytest.mark.asyncio
+async def test_quiet_hours_suppress_pending_arrival_without_replay():
+    b = bridge()
+    b.enabled = True
+    b.companion.policy.quiet_at = lambda hour: True
+    b.companion.policy.timezone = "Europe/Oslo"
+    b.pending = ("Hello", time.monotonic() + 60)
+    await b.flush_pending()
+    b.announce.assert_not_awaited()
+    assert b.pending is None

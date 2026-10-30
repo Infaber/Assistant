@@ -163,6 +163,12 @@ async def test_live_check_in_generation_disables_tools_and_waits_for_the_user(
     import companion
 
     b = bridge()
+    b.followups = SimpleNamespace(
+        prepare=AsyncMock(
+            return_value={"topic": "exam", "fact": "An exam today", "follow_up_at": 1}
+        ),
+        claim=AsyncMock(return_value=True),
+    )
     b.session.agent_state = "listening"
     b.session.user_state = "away"
     b.policy.configure(settings(quiet_start=0, quiet_end=0), 0)
@@ -186,9 +192,11 @@ async def test_live_check_in_generation_disables_tools_and_waits_for_the_user(
     assert b.session.generate_reply.call_args.kwargs["tool_choice"] == "none"
     assert b.session.generate_reply.call_args.kwargs["allow_interruptions"] is True
     assert b.policy.awaiting_user
-    event = b.session.current_agent.chat_ctx.items[-1]
-    assert "scheduler event" in event.text_content
-    assert "NOT a user message" in event.text_content
+    assert b.session.generate_reply.call_args.kwargs["tools"] == []
+    assert (
+        "untrusted saved" in b.session.generate_reply.call_args.kwargs["instructions"]
+    )
+    assert not b.session.current_agent.chat_ctx.items
 
 
 @pytest.mark.parametrize("stored_error", [False, True])
@@ -198,6 +206,12 @@ async def test_failed_check_in_delivery_does_not_block_future_check_ins(
     import companion
 
     b = bridge()
+    b.followups = SimpleNamespace(
+        prepare=AsyncMock(
+            return_value={"topic": "exam", "fact": "An exam today", "follow_up_at": 1}
+        ),
+        claim=AsyncMock(return_value=True),
+    )
     b.session.agent_state = "listening"
     b.session.user_state = "away"
     b.policy.configure(settings(quiet_start=0, quiet_end=0), 0)
@@ -316,3 +330,13 @@ async def test_idle_refresh_and_check_in_do_not_preempt_snapshot(monkeypatch):
     b.session.update_agent.assert_not_called()
     b.session.generate_reply.assert_not_called()
     pending.cancel()
+
+
+def test_camera_image_context_does_not_count_as_a_human_reply():
+    b = bridge()
+    b.policy.awaiting_user = True
+    b.policy.last_activity = 123
+    b.on_message(
+        SimpleNamespace(item=SimpleNamespace(role="user", id="camera-image-test"))
+    )
+    assert b.policy.awaiting_user and b.policy.last_activity == 123

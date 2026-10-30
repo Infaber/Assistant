@@ -1,7 +1,9 @@
 """Deterministic tool fixtures used only by LiveKit simulation jobs."""
 
 import subprocess
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 
 from livekit.agents import (
     Agent,
@@ -15,6 +17,7 @@ from livekit.agents.llm import ToolError
 from action_events import observed
 from mac_simulation import DesktopFixture, SpotifyFixture
 from memory_retrieval import relevant_memories
+from memory_tools import MemoryStore
 from notes_tools import write_approval
 
 LIBRARY_URL = "https://example.com/library"
@@ -129,6 +132,14 @@ def configure_simulation_tools(
             "home_assistant_alias",
         ):
             mocks.pop(name)
+    elif fixture == "companionship_memory":
+        directory = tempfile.TemporaryDirectory(prefix="ariana-fictional-memory-")
+        store = MemoryStore(Path(directory.name) / "memory.sqlite3")
+        session.userdata = {
+            "_memory_simulator": store.run,
+            "_memory_fixture_directory": directory,
+        }
+        mocks.pop("memory_manage")
     elif fixture == "relevant_memory":
         facts = [
             ("esp32", "Building an ESP32 automation project"),
@@ -356,6 +367,15 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture == "companionship_memory":
+        backend = ctx.job_context.primary_session.userdata["_memory_simulator"]
+        items = backend({"action": "recall", "kind": "project"})["memories"]
+        combined = " ".join(item["fact"] for item in items).casefold()
+        if "raspberry" not in combined or "overheat" not in combined:
+            ctx.fail(
+                "The corrected rover project and unresolved overheating issue were not retained accurately."
+            )
+        return
     if fixture in {
         "camera_recognition",
         "camera_persistent_greetings",

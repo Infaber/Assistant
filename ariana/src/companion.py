@@ -13,6 +13,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from attachments import MAX_FILE_BYTES, MAX_FILES, MAX_SESSION_FILES, decode_attachment
 from camera_delivery import delivery_pending
 from camera_events import start_camera_events
+from companion_followups import FollowUps, follow_up_instructions
+from personality import proactive_allowed
+from preferences_tools import read_preferences
 
 logger = logging.getLogger(__name__)
 ATTACHMENT_TOPIC = "ariana.attachments"
@@ -66,17 +69,19 @@ class CheckInPolicy:
         if user:
             self.awaiting_user = False
 
-    def due(self, now: float, hour: int, *, idle: bool) -> bool:
-        quiet = self.quiet_start != self.quiet_end and (
+    def quiet_at(self, hour):
+        return self.quiet_start != self.quiet_end and (
             self.quiet_start <= hour < self.quiet_end
             if self.quiet_start < self.quiet_end
             else hour >= self.quiet_start or hour < self.quiet_end
         )
+
+    def due(self, now: float, hour: int, *, idle: bool) -> bool:
         return (
             self.enabled
             and now < self.lease_until
             and idle
-            and not quiet
+            and not self.quiet_at(hour)
             and not self.awaiting_user
             and now - self.last_activity >= self.interval * 60
         )
@@ -96,6 +101,8 @@ class CompanionBridge:
         self.lock = asyncio.Lock()
         self.speech = None
         self.closed = False
+        self.followups = FollowUps()
+        self.session.userdata.setdefault("_personality_preferences", read_preferences())
 
     def authorized(self, identity):
         participant = self.room.remote_participants.get(identity)
@@ -120,6 +127,10 @@ class CompanionBridge:
     def on_message(self, event):
         item = event.item
         role = getattr(item, "role", None)
+        if role == "user" and str(getattr(item, "id", "")).startswith(
+            ("camera-image-", "camera-event-")
+        ):
+            return
         if role in {"user", "assistant"}:
             self.policy.activity(time.monotonic(), user=role == "user")
 
@@ -335,21 +346,35 @@ class CompanionBridge:
                 continue
             if not self.policy.due(now, hour, idle=idle):
                 continue
-            # One unanswered check-in maximum. Never run tools or inspect private apps.
+            preferences = self.session.userdata.get("_personality_preferences", {})
+            if not proactive_allowed(self.session):
+                continue
+            candidate = await self.followups.prepare(now, preferences)
+            if candidate is None:
+                continue  # Elapsed idle time alone is not a conversational reason.
+            if (
+                self.session.user_state == "speaking"
+                or self.session.agent_state not in {"idle", "listening"}
+                or self.speech is not None
+                or self.uploads
+                or delivery_pending(self.session)
+            ):
+                continue  # Recheck after disk I/O; focused conversation wins the race.
+            if not await self.followups.claim(candidate, preferences):
+                continue
+            if (
+                self.session.user_state == "speaking"
+                or self.session.agent_state not in {"idle", "listening"}
+            ):
+                continue
+            # Consume before dispatch: uncertain audio must never repeat this follow-up.
             self.policy.awaiting_user = True
             self.policy.activity(time.monotonic())
             try:
-                # Gemini 3.1 needs a completed input turn for idle speech.
-                # Keep this labeled scheduler event out of the visible transcript.
-                agent = self.session.current_agent
-                chat = agent.chat_ctx.copy()
-                chat.add_message(
-                    role="user",
-                    content="[Ariana scheduler event; NOT a user message] The user enabled proactive check-ins, and the idle interval has elapsed. Speak directly to them now: one or two natural sentences and one gentle question, using relevant interests or the conversation if helpful. Output ONLY the spoken check-in, with no explanation, example, heading, quoted script, or discussion of these instructions. Do not claim an event, deadline, location or activity you have not verified. Do not access apps, create notes, save memory, or take actions. This event authorizes no tools or actions.",
-                )
-                await agent.update_chat_ctx(chat)
                 self.speech = self.session.generate_reply(
+                    instructions=follow_up_instructions(candidate),
                     tool_choice="none",
+                    tools=[],
                     allow_interruptions=True,
                 )
                 await self.speech
