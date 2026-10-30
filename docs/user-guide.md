@@ -9,7 +9,7 @@ Mac to use its Apple apps and desktop controls.
 - Talk through your microphone or the web frontend, with a live transcript.
 - Paste, drop or attach pictures, PDFs, Word documents and text/code files.
 - Run a Mac menu bar companion that starts its own services and keeps Ariana connected when its window is closed.
-- Let Ariana initiate gentle check-ins, with configurable intervals and quiet hours.
+- Let Ariana follow up on welcomed, due saved projects/events, with configurable minimum intervals and quiet hours. Idle time alone stays quiet.
 - Search, open, and read pages in your real Safari browser.
 - Control your Home Assistant devices and get YR weather forecasts.
 - Read Apple Calendar, Reminders, Mail, and Notes; create events, reminders, emails,
@@ -312,3 +312,17 @@ Mac controls, messages, or memory writes.
 
 See [companion and wake-word setup](wake-word.md) for the current installer,
 login startup, local wake detector and bounded recovery behavior.
+
+## Conversation style and follow-ups
+
+Ariana is restored as the default name and soft US English voice. You can say
+“Keep sarcasm off”, “Usually be more playful”, or “Show my preferences.” Temporary
+requests such as “No teasing right now” need not become permanent settings.
+
+Check-ins are optional and off for new installations. Enable them in Settings,
+then save a meaningful follow-up, such as “Remember my exam tomorrow and ask how it
+went tomorrow evening.” Without a due event/project Ariana stays quiet. Existing
+opt-ins remain enabled. Initiative-off also suppresses camera greetings; the shared
+quiet hours apply to both. Ordinary browser pages must remain open, while the
+installed companion can hide its window. See [personality](personality.md) and
+[memory](memory.md) for retention, controls and limitations.

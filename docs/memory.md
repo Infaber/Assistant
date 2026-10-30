@@ -23,3 +23,40 @@ never grant approval. Export/migration between Macs is manual; do not commit the
 Tests cover correction, limits, pause/forget, relevance and unrelated exclusion.
 The lexical method does not understand all synonyms or languages. Evaluate actual
 retrieval misses before considering a lightweight local embedding model.
+
+## Conversational memory types and retention
+
+The original facts table is preserved. A transactional side table adds a type,
+expiry, optional follow-up time and revision. Legacy rows remain facts without
+automatic reclassification or deletion. New event memories default to 30 days;
+ongoing projects to 180 days; facts/preferences have no automatic expiry.
+`retention_days` can choose 1–365 days. The same 100-topic total limit applies.
+Expired rows are removed on the next store access; no extra background service is
+needed. Deleting a topic also deletes its metadata.
+
+`memory_manage` accepts fact/preference/project/event types (auto preserves a type
+on correction), kind-filtered recall and relevant query terms. Projects can include
+short unresolved problems; events can record a meaningful discussion worth revisiting.
+Do not save transient mood labels, inferred diagnoses, entire conversations or
+private facts about other people. Explicitly sharing a concern is not permission
+to retain sensitive health details. Preferences remain in the existing preference
+file for live style changes; a conversational preference memory supplies context.
+
+Corrections replace the same topic, create a new revision and cancel its previous
+follow-up. A new welcomed future follow-up must be explicitly supplied again.
+The optional date must be within 180 days and before expiry. Date-only or naive
+ISO timestamps use Europe/Oslo; timezone offsets are preferable.
+
+Follow-up selection reads only unexpired, due event/project rows. An atomic claim
+checks revision, pause state, due time and a persisted global cooldown. Competing
+sessions cannot speak the same follow-up twice. Pause also suppresses conversational
+follow-ups; resume does not repeat consumed ones. Forget removes the candidate.
+These checks grant no permission to use tools. Details are described in
+[personality and initiative](personality.md).
+
+Retrieval remains small, deterministic and local, with plural matching and the
+existing synonym map. Startup includes only 20 facts plus the topic index and
+compact type metadata; targeted recall can access the rest. Relevance is lexical,
+not semantic: unfamiliar synonyms can miss. The assistant still operates when
+retrieval fails and must not invent a memory. Tests cover legacy migration, expiry,
+correction, unrelated exclusion, paused saving, stale claims and concurrent claims.
