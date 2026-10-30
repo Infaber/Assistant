@@ -42,6 +42,8 @@ BROWSER_ALIASES = {
 
 
 def preferences_path() -> Path:
+    if override := os.getenv("ARIANA_PREFERENCES_PATH"):
+        return Path(override).expanduser()
     if sys.platform == "darwin":
         root = Path.home() / "Library" / "Application Support"
     else:

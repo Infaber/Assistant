@@ -63,3 +63,28 @@ def test_memory_tool_schema_has_no_empty_enum_values():
     parameter = inspect.signature(memory_manage._func).parameters["kind"]
     assert parameter.default == "auto"
     assert "" not in get_args(parameter.annotation)
+
+
+def test_conversation_evaluation_covers_twenty_multiturn_cases():
+    import json
+    from pathlib import Path
+
+    rows = json.loads(
+        (Path(__file__).parents[1] / "evaluations/conversations.json").read_text()
+    )
+    assert len(rows) >= 20
+    assert len({row["id"] for row in rows}) == len(rows)
+    assert all(len(row["turns"]) >= 2 and row["expectation"] for row in rows)
+
+
+def test_preferences_survive_store_recreation_and_instructions_reload(
+    tmp_path, monkeypatch
+):
+    from instructions import configured_instructions
+    from preferences_tools import preferences_path
+
+    monkeypatch.setenv("ARIANA_PREFERENCES_PATH", str(tmp_path / "style.json"))
+    PreferencesStore().run({"action": "remember", "key": "sarcasm", "value": "off"})
+    assert preferences_path() == tmp_path / "style.json"
+    assert PreferencesStore().read()["sarcasm"] == "off"
+    assert "sarcasm: off" in configured_instructions()

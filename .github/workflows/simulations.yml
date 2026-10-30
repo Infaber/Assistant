@@ -62,3 +62,5 @@ jobs:
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-camera.yaml
       - name: Check companionship and typed memory with fictional conversations
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-companionship.yaml
+      - name: Check extended conversational coverage
+        run: lk agent simulate text --concurrency 1 --scenarios scenarios-conversation-v2.yaml

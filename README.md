@@ -84,6 +84,7 @@ are sent to the configured model provider; local memory is not a full transcript
 - [Security and public repository review](docs/security.md)
 - [Companion and local wake word](docs/wake-word.md)
 - [Development, tests and simulations](docs/development.md)
+- [Ariana 2.0 conversation evaluation and listening test](docs/conversation-v2-evaluation.md)
 - [Frontend configuration](frontend/README.md)
 
 Optional read-only camera integration: [Frigate awareness, image consent and event setup](docs/camera-awareness.md).

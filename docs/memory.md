@@ -60,3 +60,25 @@ compact type metadata; targeted recall can access the rest. Relevance is lexical
 not semantic: unfamiliar synonyms can miss. The assistant still operates when
 retrieval fails and must not invent a memory. Tests cover legacy migration, expiry,
 correction, unrelated exclusion, paused saving, stale claims and concurrent claims.
+
+## Project progress and conversation continuity
+
+Use `action=progress` with an existing project topic and a short updated `fact`.
+It keeps at most two dated previous summaries alongside the current summary. Recall
+before updating an unfamiliar topic. These are user-shared developments, not an
+automatic transcript, emotional profile or background conversation recorder.
+A meaningful unresolved discussion can be saved as one short project summary.
+
+`remember` remains the initial-save/correction operation and clears the topic's
+previous summaries. A false or unwanted claim must not survive as “history”.
+`forget` and expiry cascade to history. Saving pause, credential rejection, the
+400-character summary limit and 100-topic total limit apply to progress too.
+Progress is only allowed for existing projects. Repeating an identical progress
+update does not grow history or clear a pending follow-up. A changed summary
+invalidates the previous follow-up; reschedule only if welcomed by the user.
+
+Relevant recall searches current summaries and the bounded history, but returns
+the latest fact separately from dated previous summaries. Old milestones are not
+current truth. Startup still contains only current facts and the topic index;
+history is retrieved when needed, keeping the realtime prompt small. No embeddings,
+cloud memory, periodic summarization job or extra model call was introduced.

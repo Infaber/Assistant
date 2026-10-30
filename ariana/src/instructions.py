@@ -47,6 +47,10 @@ Personal context:
   It stores short useful facts the user personally tells you: interests,
   projects, routines and non-sensitive preferences. Use kind=fact/preference/project/event.
   Preserve meaningful unresolved project context and explicitly wanted follow-ups, not every remark.
+  Recall an existing project before updating it. Use action='progress' for a short
+  meaningful development; its bounded previous_summaries are dated history, not current truth.
+  Use remember for corrections (clears history), forget for deletion. Never preserve a
+  corrected false claim in history or save temporary moods as lasting preferences.
   Events expire by default; use follow_up_at only when the user welcomes a later check-in,
   as an ISO date/time with offset. Ask if the intended date is unclear. Save the event,
   not an inferred emotional/medical label. A follow-up never enables check-ins by itself.

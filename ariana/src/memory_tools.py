@@ -36,13 +36,24 @@ class MemoryStore:
         query = request.get("query", "").strip()
         if len(query) > 500:
             raise ValueError("Use a short memory search query.")
-        if action not in {"remember", "recall", "forget", "pause", "resume"}:
-            raise ValueError("Choose remember, recall, forget, pause or resume.")
-        if action in {"remember", "forget"} and (not topic or len(topic) > 80):
+        if action not in {
+            "remember",
+            "progress",
+            "recall",
+            "forget",
+            "pause",
+            "resume",
+        }:
+            raise ValueError(
+                "Choose remember, progress, recall, forget, pause or resume."
+            )
+        if action in {"remember", "progress", "forget"} and (
+            not topic or len(topic) > 80
+        ):
             raise ValueError("Provide a short topic to remember or forget.")
         if len(topic) > 80 or len(fact) > 400 or any(ord(c) < 32 for c in topic + fact):
             raise ValueError("Use a short plain-text topic and fact.")
-        if action == "remember" and (
+        if action in {"remember", "progress"} and (
             not fact
             or re.search(
                 r"AQ\.[0-9A-Za-z_-]{30,}|AIza[0-9A-Za-z_-]{35}|(?:ghp_|github_pat_)[A-Za-z0-9_]{30,}|sk-(?:proj-)?[A-Za-z0-9_-]{40,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
@@ -77,7 +88,7 @@ class MemoryStore:
                     "INSERT OR REPLACE INTO settings VALUES ('paused', ?)",
                     ("1" if paused else "0",),
                 )
-            elif action == "remember":
+            elif action in {"remember", "progress"}:
                 if paused:
                     return {
                         "error": "Memory saving is paused. Resume only when the user asks.",
@@ -91,11 +102,24 @@ class MemoryStore:
                     return {
                         "error": "Memory is full; forget an old topic first. Existing memories were preserved."
                     }
+                if action == "progress":
+                    if kind not in {"", "project"}:
+                        raise ValueError("Progress must keep the project type.")
+                    changed = lifecycle.progress(db, topic, fact)
+                    if not changed and (retention or follow is not None):
+                        raise ValueError(
+                            "Use remember for changed retention or follow-up settings."
+                        )
+                else:
+                    # Corrections must erase superseded claims, not preserve them as history.
+                    db.execute("DELETE FROM project_history WHERE topic=?", (topic,))
+                    changed = True
                 db.execute(
                     "INSERT INTO facts(topic,fact) VALUES (?,?) ON CONFLICT(topic) DO UPDATE SET fact=excluded.fact, updated=CURRENT_TIMESTAMP",
                     (topic, fact),
                 )
-                lifecycle.save(db, topic, kind, retention, follow)
+                if changed:
+                    lifecycle.save(db, topic, kind, retention, follow)
             elif action == "forget":
                 db.execute("DELETE FROM facts WHERE topic=?", (topic,))
             rows = db.execute(
@@ -109,11 +133,27 @@ class MemoryStore:
             if action == "recall" and kind:
                 typed = [item for item in typed if item["kind"] == kind]
                 rows = [(item["topic"], item["fact"]) for item in typed]
-            memories = (
-                relevant_memories(rows, query)
-                if query and action == "recall"
-                else [{"topic": t, "fact": f} for t, f in rows]
-            )
+            if query and action == "recall":
+                documents = [
+                    (
+                        item["topic"],
+                        item["fact"]
+                        + " "
+                        + " ".join(
+                            previous["summary"]
+                            for previous in item["previous_summaries"]
+                        ),
+                    )
+                    for item in typed
+                ]
+                ranked = relevant_memories(documents, query)
+                current = dict(rows)
+                memories = [
+                    {"topic": item["topic"], "fact": current[item["topic"]]}
+                    for item in ranked
+                ]
+            else:
+                memories = [{"topic": t, "fact": f} for t, f in rows]
             selected = {item["topic"] for item in memories}
             return {
                 "success": True,
@@ -176,7 +216,7 @@ def memory_context() -> str:
             {
                 key: value
                 for key, value in item.items()
-                if key not in {"fact", "revision"}
+                if key not in {"fact", "revision", "previous_summaries"}
             }
             for item in data.get("details", [])
             if item["topic"] in selected
@@ -195,7 +235,7 @@ def memory_context() -> str:
 @observed("Personal memory")
 async def memory_manage(
     context: RunContext,
-    action: Literal["remember", "recall", "forget", "pause", "resume"],
+    action: Literal["remember", "progress", "recall", "forget", "pause", "resume"],
     topic: str = "",
     fact: str = "",
     query: str = "",
@@ -204,6 +244,11 @@ async def memory_manage(
     retention_days: int = 0,
 ) -> dict:
     """Remember, recall, correct or forget useful facts the user personally tells you.
+    Use progress for a meaningful user-shared development of an existing project,
+    after recalling its exact topic. Supply a short updated summary in fact, not a transcript.
+    Keeps at most two previous summaries as dated history, not current truth.
+    remember is for initial saves or corrections; it erases superseded history.
+    Never use progress to retain something the user corrected or asked to forget.
     kind distinguishes fact/preference/project/event; auto preserves the existing type
     on correction and does not filter recall. Event retention defaults to 30 days;
     projects to 180 days; facts/preferences persist until forgotten (100 total limit).
@@ -225,11 +270,11 @@ async def memory_manage(
         state = context.session.userdata
     except ValueError:
         state = {}
-    if action not in {"remember", "recall", "forget", "pause", "resume"}:
+    if action not in {"remember", "progress", "recall", "forget", "pause", "resume"}:
         return {
-            "error": "Use remember, recall, forget, pause or resume. No memory was changed."
+            "error": "Use remember, progress, recall, forget, pause or resume. No memory was changed."
         }
-    if action == "remember" and state.get("_camera_private_turn"):
+    if action in {"remember", "progress"} and state.get("_camera_private_turn"):
         users = [
             item
             for item in context.session.history.items

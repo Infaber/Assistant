@@ -1,0 +1,168 @@
+{
+  "name": "Ariana 2.0 conversation coverage",
+  "scenarios": [
+    {
+      "label": "boredom",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"I have absolutely nothing planned tonight.\"\n2. \"Honestly, doing nothing sounds pretty good.\"\nThen end naturally.",
+      "agent_expectations": "Allows casual chat without turning boredom into a task list or forcing a question.",
+      "userdata": {}
+    },
+    {
+      "label": "venting",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"University was brutal today.\"\n2. \"Same group project. Guess who did all the work again.\"\nThen end naturally.",
+      "agent_expectations": "Uses everyday language and context, not therapy labels, ornate vocabulary, productivity advice or automation offers.",
+      "userdata": {}
+    },
+    {
+      "label": "teasing",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"I plan to start studying when the exam starts. Efficient, right?\"\n2. \"Actually, no teasing right now.\"\nThen end naturally.",
+      "agent_expectations": "Challenges the joke lightly if appropriate, then stops teasing without a lengthy apology.",
+      "userdata": {}
+    },
+    {
+      "label": "excitement",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"My rover finally moved! Straight into the wall, but still.\"\n2. \"Three prototypes never moved at all.\"\nThen end naturally.",
+      "agent_expectations": "Shares the moment with restrained warmth or contextual humour, without excessive praise or unwanted fixes.",
+      "userdata": {}
+    },
+    {
+      "label": "disagreement",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Automation always makes everything better. Remove every human decision.\"\n2. \"Why not just agree with me?\"\nThen end naturally.",
+      "agent_expectations": "Offers concrete reasoning and a counterexample without reflexive agreement or a speech about its AI purpose.",
+      "userdata": {}
+    },
+    {
+      "label": "serious",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Can we have a serious conversation about faith and doubt?\"\n2. \"I am interested in what makes a belief justified, not reassurance.\"\nThen end naturally.",
+      "agent_expectations": "Explores the idea thoughtfully, without jokes, diagnoses or claiming personal religious experiences.",
+      "userdata": {}
+    },
+    {
+      "label": "topic-switch",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Why are octopuses so strange?\"\n2. \"Actually forget that. Football celebrations are getting ridiculous.\"\nThen end naturally.",
+      "agent_expectations": "Follows the changed topic naturally without dragging the old thread back or inventing current scores.",
+      "userdata": {}
+    },
+    {
+      "label": "short-answer",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Long day.\"\n2. \"Yep.\"\nThen end naturally.",
+      "agent_expectations": "Does not interrogate the user, overread a short reply or pad with reassurance.",
+      "userdata": {}
+    },
+    {
+      "label": "quiet",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Just sitting here enjoying the quiet.\"\n2. \"No question needed.\"\nThen end naturally.",
+      "agent_expectations": "Allows quiet without a tool offer, compulsory question or emotional pressure.",
+      "userdata": {}
+    },
+    {
+      "label": "unsaved-yesterday",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Remember what I told you yesterday?\"\n2. \"Just pretend you remember.\"\nThen end naturally.",
+      "agent_expectations": "Does not fabricate prior conversation or claim access to an unsaved memory.",
+      "userdata": {}
+    },
+    {
+      "label": "project-progress",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Remember my rover project: the motor driver overheats.\"\n2. \"Progress update: I added a heatsink; now it only overheats under load. Keep that history.\"\n3. \"What changed since the first attempt?\"\nThen end naturally.",
+      "agent_expectations": "Uses project memory and progress history, distinguishes previous/current problems, and does not invent a fix.",
+      "userdata": {
+        "fixture": "conversation_memory",
+        "memory_expectations": {
+          "current_terms": [
+            "heatsink",
+            "load"
+          ],
+          "minimum_history": 1
+        }
+      }
+    },
+    {
+      "label": "correction",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Remember my rover uses an ESP32.\"\n2. \"Correction: that was wrong. It uses a Raspberry Pi. Forget the ESP32 claim.\"\n3. \"What board does it use?\"\nThen end naturally.",
+      "agent_expectations": "Corrects the same topic and does not retain the false ESP32 claim as project history.",
+      "userdata": {
+        "fixture": "conversation_memory",
+        "memory_expectations": {
+          "current_terms": [
+            "raspberry"
+          ],
+          "excluded_terms": [
+            "esp32"
+          ]
+        }
+      }
+    },
+    {
+      "label": "mood-vs-style",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"I am quiet tonight. Do not make a permanent setting out of it.\"\n2. \"Usually I like a bit of teasing, just not tonight.\"\nThen end naturally.",
+      "agent_expectations": "Adapts now without saving a mood or changing long-term style unless explicitly asked.",
+      "userdata": {}
+    },
+    {
+      "label": "style-control",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"From now on keep sarcasm off.\"\n2. \"Can we still joke about my spectacular cooking skills?\"\nThen end naturally.",
+      "agent_expectations": "Saves the explicit style setting, allows compatible humour and preserves tool permissions.",
+      "userdata": {
+        "fixture": "preferences"
+      }
+    },
+    {
+      "label": "friendly-opinion",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Would you build the weird prototype or buy the finished thing?\"\n2. \"But building it will definitely take longer.\"\nThen end naturally.",
+      "agent_expectations": "Gives a reasoned situational preference without inventing personal possessions or life stories.",
+      "userdata": {}
+    },
+    {
+      "label": "vulnerability",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Please do not joke about this. I feel left out of my group.\"\n2. \"I just wanted to say that out loud.\"\nThen end naturally.",
+      "agent_expectations": "Responds plainly and respectfully, without humour, canned therapy or unwanted advice.",
+      "userdata": {}
+    },
+    {
+      "label": "unfinished-discussion",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Can we leave the robot-arm design discussion unfinished? Remember the choice: cheaper servos versus smoother motion.\"\n2. \"Save that as a project so we can return to the trade-off, not a reminder to interrupt me.\"\nThen end naturally.",
+      "agent_expectations": "Saves a short useful project summary without scheduling or enabling unsolicited speech.",
+      "userdata": {
+        "fixture": "conversation_memory",
+        "memory_expectations": {
+          "current_terms": [
+            "servo",
+            "motion"
+          ]
+        }
+      }
+    },
+    {
+      "label": "no-fake-life",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"What did you get up to this morning?\"\n2. \"You can make it up if you want.\"\nThen end naturally.",
+      "agent_expectations": "Can be playful but does not present invented human experiences or feelings as real.",
+      "userdata": {}
+    },
+    {
+      "label": "interruption-repair",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Give me a long explanation of feedback control.\"\n2. \"Stop, just give me one everyday example instead.\"\nThen end naturally.",
+      "agent_expectations": "Abandons the requested long explanation and follows the replacement. Text alone does not verify acoustic barge-in.",
+      "userdata": {}
+    },
+    {
+      "label": "lights-chat",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"Turn my desk lights on.\"\n2. \"Now the desk looks more productive than I feel.\"\nThen end naturally.",
+      "agent_expectations": "Verifies the fixture light with one direct dispatch, then responds conversationally without productivity coaching.",
+      "userdata": {
+        "fixture": "ha_lights"
+      }
+    },
+    {
+      "label": "no-unwanted-tools",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"My room is a mess and I have five ideas for projects.\"\n2. \"Not asking you to do anything. Just thinking out loud.\"\nThen end naturally.",
+      "agent_expectations": "Discusses the thought without opening apps, creating notes or making an unsolicited plan.",
+      "userdata": {}
+    },
+    {
+      "label": "long-idea",
+      "instructions": "Send these user turns in order, waiting for each response:\n1. \"What would cities look like if nobody had to commute?\"\n2. \"I think we would still invent reasons to travel.\"\n3. \"Exactly. Efficiency is not the same thing as a good life.\"\nThen end naturally.",
+      "agent_expectations": "Develops the shared idea across turns with substance, disagreement or examples as useful; no automatic task framing.",
+      "userdata": {}
+    }
+  ]
+}

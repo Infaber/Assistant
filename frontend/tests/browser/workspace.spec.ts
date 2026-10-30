@@ -69,11 +69,11 @@ test("six styles and caption/feedback preferences persist without connecting", a
     ).toHaveAttribute("aria-pressed", "true");
   }
   await page.getByLabel("Captions", { exact: true }).check();
-  await page.getByLabel("Spoken thinking feedback").uncheck();
+  await page.getByLabel("Spoken feedback during tools").uncheck();
   await page.reload();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Captions", { exact: true })).toBeChecked();
-  await expect(page.getByLabel("Spoken thinking feedback")).not.toBeChecked();
+  await expect(page.getByLabel("Spoken feedback during tools")).not.toBeChecked();
   await expect(page.locator("canvas")).toHaveAttribute("data-style", "5");
   expect(requests).toBe(0);
 });

@@ -49,6 +49,9 @@ def schema(db):
         "CREATE TABLE IF NOT EXISTS memory_details (topic TEXT PRIMARY KEY REFERENCES facts(topic) ON DELETE CASCADE, kind TEXT NOT NULL, expires_at REAL, follow_up_at REAL, followed_up INTEGER NOT NULL DEFAULT 0, revision TEXT NOT NULL)"
     )
     db.execute(
+        "CREATE TABLE IF NOT EXISTS project_history (id INTEGER PRIMARY KEY, topic TEXT NOT NULL REFERENCES facts(topic) ON DELETE CASCADE, summary TEXT NOT NULL, recorded_at REAL NOT NULL)"
+    )
+    db.execute(
         "DELETE FROM facts WHERE topic IN (SELECT topic FROM memory_details WHERE expires_at IS NOT NULL AND expires_at<=?)",
         (time.time(),),
     )
@@ -80,6 +83,7 @@ def details(db, rows):
         dict(
             topic=topic,
             fact=fact,
+            previous_summaries=history(db, topic),
             **dict(
                 zip(
                     ("kind", "expires_at", "follow_up_at", "followed_up", "revision"),
@@ -89,4 +93,37 @@ def details(db, rows):
             ),
         )
         for topic, fact in rows
+    ]
+
+
+def progress(db, topic, fact):
+    """Keep two prior project summaries, never raw transcript or false corrections."""
+    old = db.execute(
+        "SELECT f.fact,d.kind FROM facts f JOIN memory_details d USING(topic) WHERE topic=?",
+        (topic,),
+    ).fetchone()
+    if not old or old[1] != "project":
+        raise ValueError("Progress needs an existing project; recall its topic first.")
+    if old[0] == fact:
+        return (
+            False  # A repeated update must not extend retention or cancel a reminder.
+        )
+    db.execute(
+        "INSERT INTO project_history(topic,summary,recorded_at) VALUES (?,?,?)",
+        (topic, old[0], time.time()),
+    )
+    db.execute(
+        "DELETE FROM project_history WHERE topic=? AND id NOT IN (SELECT id FROM project_history WHERE topic=? ORDER BY id DESC LIMIT 2)",
+        (topic, topic),
+    )
+    return True
+
+
+def history(db, topic):
+    return [
+        {"summary": summary, "recorded_at": recorded}
+        for summary, recorded in db.execute(
+            "SELECT summary,recorded_at FROM project_history WHERE topic=? ORDER BY id",
+            (topic,),
+        )
     ]

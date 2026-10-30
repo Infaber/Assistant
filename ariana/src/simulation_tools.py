@@ -132,7 +132,7 @@ def configure_simulation_tools(
             "home_assistant_alias",
         ):
             mocks.pop(name)
-    elif fixture == "companionship_memory":
+    elif fixture in {"companionship_memory", "conversation_memory"}:
         directory = tempfile.TemporaryDirectory(prefix="ariana-fictional-memory-")
         store = MemoryStore(Path(directory.name) / "memory.sqlite3")
         session.userdata = {
@@ -367,6 +367,24 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture == "conversation_memory":
+        backend = ctx.job_context.primary_session.userdata["_memory_simulator"]
+        data = backend({"action": "recall", "kind": "project"})
+        facts = " ".join(item["fact"] for item in data["memories"]).casefold()
+        expected = ctx.userdata()["memory_expectations"]
+        if not all(term in facts for term in expected["current_terms"]):
+            ctx.fail("Expected the user-shared project summary to be saved accurately.")
+        histories = [
+            old for item in data["details"] for old in item["previous_summaries"]
+        ]
+        if len(histories) < expected.get("minimum_history", 0):
+            ctx.fail("Expected bounded progress history, not only the latest summary.")
+        combined = facts + " ".join(item["summary"] for item in histories).casefold()
+        if any(term in combined for term in expected.get("excluded_terms", [])):
+            ctx.fail("A corrected false claim survived in project memory.")
+        if any(item["follow_up_at"] for item in data["details"]):
+            ctx.fail("This conversation did not authorize scheduling a follow-up.")
+        return
     if fixture == "companionship_memory":
         backend = ctx.job_context.primary_session.userdata["_memory_simulator"]
         items = backend({"action": "recall", "kind": "project"})["memories"]

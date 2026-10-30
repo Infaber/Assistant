@@ -45,6 +45,7 @@ import { desktopConfig } from "../lib/desktop";
 import SharingComposer, { type SharedMessage } from "./sharing-composer";
 import CheckInControls from "./check-in-controls";
 import {
+  hasRunningAction,
   parseActivity,
   updateActivity,
   finishActivity,
@@ -144,12 +145,12 @@ function Workspace({
   const inputLevel = useTrackVolume(
     microphoneTrack instanceof LocalAudioTrack ? microphoneTrack : undefined,
   );
+  const [activity, setActivity] = useState<Activity[]>([]);
   const feedbackLevel = useThinkingFeedback(
     session.isConnected && agent.state === "thinking",
-    feedback,
+    feedback && hasRunningAction(activity),
     inputLevel,
   );
-  const [activity, setActivity] = useState<Activity[]>([]);
   const [providerError, setProviderError] = useState("");
   const [busy, setBusy] = useState(false);
   const [mediaBusy, setMediaBusy] = useState(false);
@@ -860,7 +861,7 @@ function Workspace({
           />
         </label>
         <label className="setting-toggle">
-          Spoken thinking feedback
+          Spoken feedback during tools
           <input
             type="checkbox"
             checked={feedback}

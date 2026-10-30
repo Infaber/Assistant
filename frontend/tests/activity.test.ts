@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseActivity, updateActivity, finishActivity, type Activity } from '../lib/activity';
+import { hasRunningAction, parseActivity, updateActivity, finishActivity, type Activity } from '../lib/activity';
 const event: Activity = { version:1, id:'one', kind:'action', label:'Safari', detail:'Working', timestamp:100, status:'running' };
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 
@@ -21,4 +21,12 @@ test('bounds retained events and marks disconnected actions uncertain', () => {
   assert.equal(rows.length,40); assert.equal(rows[0].id,'10');
   assert.equal(finishActivity(rows)[0].status,'uncertain');
   assert.equal(finishActivity([{...event,status:'verified'}])[0].status,'verified');
+});
+
+test('spoken progress is quiet during chat, approvals, recovery and completed actions', () => {
+  assert.equal(hasRunningAction([]), false);
+  assert.equal(hasRunningAction([event]), true);
+  for (const status of ['approval', 'returned', 'verified', 'failed', 'uncertain', 'recovering'] as const)
+    assert.equal(hasRunningAction([{...event, status}]), false);
+  assert.equal(hasRunningAction([{...event, kind:'system'}]), false);
 });

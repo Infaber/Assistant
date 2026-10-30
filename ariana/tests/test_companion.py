@@ -340,3 +340,27 @@ def test_camera_image_context_does_not_count_as_a_human_reply():
         SimpleNamespace(item=SimpleNamespace(role="user", id="camera-image-test"))
     )
     assert b.policy.awaiting_user and b.policy.last_activity == 123
+
+
+@pytest.mark.parametrize("change", ["disabled", "initiative", "user", "quiet", "lease"])
+async def test_followup_rechecks_policy_after_disk_io(monkeypatch, change):
+    import companion
+
+    b = bridge()
+    b.session.agent_state = "listening"
+    b.session.user_state = "away"
+    b.policy.configure(settings(quiet_start=0, quiet_end=0), 0)
+    b.policy.lease_until = 2000
+    monkeypatch.setattr(companion.time, "monotonic", lambda: 1000)
+    assert b.follow_up_ready()
+    if change == "disabled":
+        b.policy.enabled = False
+    elif change == "initiative":
+        b.session.userdata["_personality_preferences"] = {"initiative": "off"}
+    elif change == "user":
+        b.policy.activity(999, user=True)
+    elif change == "quiet":
+        monkeypatch.setattr(b.policy, "quiet_at", lambda hour: True)
+    else:
+        b.policy.lease_until = 1
+    assert not b.follow_up_ready()

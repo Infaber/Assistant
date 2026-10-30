@@ -25,3 +25,8 @@ export function updateActivity(rows: Activity[], event: Activity): Activity[] {
 export function finishActivity(rows: Activity[]): Activity[] {
   return rows.map(row => ['running', 'recovering'].includes(row.status) ? { ...row, status: 'uncertain', detail: 'Connection ended before a final result arrived. Check before repeating the action.' } : row);
 }
+
+/** Prerecorded progress speech belongs to running actions, not ordinary conversation. */
+export function hasRunningAction(rows: Activity[]): boolean {
+  return rows.some(row => row.kind === 'action' && row.status === 'running');
+}

@@ -117,3 +117,27 @@ open "$HOME/Applications/Ariana.app"
 
 `NEXT_PUBLIC_ASSISTANT_NAME` is presentation only and requires a frontend rebuild.
 Never put credentials in a `NEXT_PUBLIC_` variable.
+
+## Controlled conversation comparison
+
+`ariana/evaluations/conversations.json` supplies 22 fictional multi-turn cases.
+The corresponding `scenarios-conversation-v2.yaml` runs through LiveKit with safe
+fixtures and objective project-memory/light-action end-state checks where relevant.
+CI includes that suite. Text interruption repair is not an acoustic barge-in test.
+
+For a small direct Gemini comparison, save the previous composed instructions
+before editing, then run from the repository root:
+
+```sh
+ariana/.venv/bin/python ariana/scripts/evaluate_conversation.py \
+  --before /tmp/ariana-before.txt --output /tmp/ariana-comparison.json \
+  --audio-dir /tmp/ariana-listening
+```
+
+The default is two fictional cases (eight total real model turns), not the full
+suite. `--case` may select other dataset IDs, with a hard cap of eight turns per
+version. Credentials load locally; only fictional messages and composed system
+instructions go to Google. No microphone, personal memory, app tools or source
+upload is involved. Output/audio are private local files; a failed run preserves
+only completed turns and exits unsuccessfully. Use a trusted local baseline file.
+An audio export is a listening aid, not proof of good speech quality.

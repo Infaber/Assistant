@@ -307,6 +307,19 @@ class CompanionBridge:
         except (TypeError, ValueError, KeyError) as error:
             return json.dumps({"error": str(error)})
 
+    def follow_up_ready(self):
+        hour = datetime.now(ZoneInfo(self.policy.timezone)).hour
+        idle = (
+            self.session.agent_state in {"idle", "listening"}
+            and self.session.user_state != "speaking"
+            and self.speech is None
+            and not self.uploads
+            and not delivery_pending(self.session)
+        )
+        return proactive_allowed(self.session) and self.policy.due(
+            time.monotonic(), hour, idle=idle
+        )
+
     async def check_in_loop(self):
         while not self.closed:
             await asyncio.sleep(5)
@@ -352,21 +365,12 @@ class CompanionBridge:
             candidate = await self.followups.prepare(now, preferences)
             if candidate is None:
                 continue  # Elapsed idle time alone is not a conversational reason.
-            if (
-                self.session.user_state == "speaking"
-                or self.session.agent_state not in {"idle", "listening"}
-                or self.speech is not None
-                or self.uploads
-                or delivery_pending(self.session)
-            ):
-                continue  # Recheck after disk I/O; focused conversation wins the race.
+            if not self.follow_up_ready():
+                continue
             if not await self.followups.claim(candidate, preferences):
                 continue
-            if (
-                self.session.user_state == "speaking"
-                or self.session.agent_state not in {"idle", "listening"}
-            ):
-                continue
+            if not self.follow_up_ready():
+                continue  # A cancelled/uncertain claim is consumed, never replayed.
             # Consume before dispatch: uncertain audio must never repeat this follow-up.
             self.policy.awaiting_user = True
             self.policy.activity(time.monotonic())

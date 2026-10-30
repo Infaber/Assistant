@@ -73,4 +73,26 @@ Reviewed official references:
 [Google Live best practices](https://ai.google.dev/gemini-api/docs/live-api/best-practices).
 Actual voice quality, interruptions and amused delivery need human listening with
 the chosen microphone/speakers. Text tests do not establish natural-sounding audio.
-See [evaluation notes](personality-evaluation.md).
+See [initial evaluation](personality-evaluation.md) and the
+[Ariana 2.0 evaluation and listening checklist](conversation-v2-evaluation.md).
+
+## Ariana 2.0 refinements
+
+The stable conversation section is shorter and uses everyday spoken language. It
+allows longer idea-driven discussions, contractions, contextual cheekiness and
+reasoned views without a mandatory empathy/question sequence or random response
+selector. This is model guidance, not a guarantee of uniformly natural wording.
+
+The frontend's optional recorded progress cues now require a running action. They
+do not play just because a casual response is taking time. They still stop when
+the user or Ariana starts speaking; the setting is labelled “Spoken feedback during
+tools”. Gemini's actual response is never deliberately delayed.
+
+The scheduler rechecks the complete idle/lease/quiet-hours/initiative policy after
+both asynchronous lookups and atomic claims. A setting change or a new user turn
+wins over a queued follow-up; consumed uncertain claims are never replayed.
+
+`ARIANA_PREFERENCES_PATH` optionally overrides the local preferences file, useful
+for isolated evaluations or another local profile. Normal installs keep their
+existing location. Style preferences load on reconnect and apply through the
+existing live-update path. No new setup or dependency is required.
