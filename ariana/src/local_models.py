@@ -59,7 +59,7 @@ async def prepare_local():
 def local_options():
     # Imports remain optional; Normal mode needs none of these dependencies/assets.
     import onnxruntime
-    from livekit.agents import TurnHandlingOptions
+    from livekit.agents import TurnHandlingOptions, tokenize, tts
     from livekit.plugins import openai, silero
     from openai import AsyncOpenAI
 
@@ -90,7 +90,41 @@ def local_options():
             timeout=httpx.Timeout(90),
         ),
         "stt": LocalSTT(),
-        "tts": LocalTTS(),
+        "tts": tts.StreamAdapter(
+            tts=LocalTTS(),
+            sentence_tokenizer=tokenize.blingfire.SentenceTokenizer(
+                min_sentence_len=1, stream_context_len=2, retain_format=True
+            ),
+        ),
         "vad": silero.VAD.load(max_buffered_speech=60),
         "turn_handling": TurnHandlingOptions(turn_detection="vad"),
     }
+
+
+async def prewarm_local(agent):
+    """Warm the real prompt and voice before publishing readiness. No effects/output."""
+    from livekit.agents.llm.tool_context import is_function_tool
+
+    from local_routing import visible_tools
+    from local_speech import LocalTTS
+
+    async def prompt():
+        tools = visible_tools(
+            [tool for tool in agent.tools if is_function_tool(tool)], ()
+        )
+        # Read one chunk then close: prepare the prefix, never execute generated tools.
+        async with agent.llm.chat(
+            chat_ctx=agent.chat_ctx.copy(), tools=tools, tool_choice="auto"
+        ) as stream:
+            async for chunk in stream:
+                # A role-only header is not a completed prompt prefill.
+                delta = getattr(chunk, "delta", None)
+                if delta and (delta.content or delta.tool_calls):
+                    break
+
+    async def voice():
+        async with LocalTTS().synthesize("Ready.") as stream:
+            async for _ in stream:
+                pass  # Warm kernels, never play a fabricated acknowledgment.
+
+    await asyncio.wait_for(asyncio.gather(prompt(), voice()), timeout=25)

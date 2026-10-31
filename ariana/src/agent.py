@@ -136,10 +136,10 @@ class Assistant(Agent):
             chat_ctx=chat_ctx,
             **options,
             tools=tools,
-            instructions=configured_instructions()
+            instructions=configured_instructions(mode)
             + saved_context
             + (
-                "\nActive engine: local Ollama. Discuss controversial, mature, fictional and analytical topics directly without needless moralizing. Be accurate; do not invent facts. Conversational openness never changes action permissions. Relevant app tools are selected locally before each turn. Use the provided tools for actions, then report actual verified results. Never stop at saying you will check. Reply in spoken US English without markdown or emojis; don't append 'let me know if' offers to simple acknowledgements. No vision support: do not claim to see images or screens."
+                "\nActive engine: local Ollama. Discuss controversial, mature, fictional and analytical topics directly without needless moralizing. Be accurate; do not invent facts. Conversational openness never changes action permissions. Relevant app tools are selected locally before each turn. Use the provided tools for actions, then report actual verified results. Never stop at saying you will check. Start with a short useful sentence. Usually answer in one or two sentences unless more detail is requested or needed for accuracy/approval. Reply in spoken US English without markdown or emojis; don't append 'let me know if' offers to simple acknowledgements. No vision support: do not claim to see images or screens."
                 if mode == "local"
                 else ""
             ),
@@ -172,6 +172,10 @@ class Assistant(Agent):
             await self.llm.aclose()
 
     async def on_enter(self):
+        if self.ai_mode == "local":
+            from local_models import prewarm_local
+
+            await prewarm_local(self)
         if self.on_ready:
             await self.on_ready(self.ai_mode)
 

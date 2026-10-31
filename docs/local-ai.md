@@ -88,6 +88,38 @@ loopback and starts at login; stop it with `brew services stop ollama` if unwant
 The model's default five-minute keep-alive releases idle model allocations later;
 the lightweight service can stay running without continuous inference.
 
+## Faster conversation profile
+
+This Mac now uses **`ariana-local:4b`** in both private env files for responsiveness.
+The default 8B alias remains the stronger reasoning option; it is still installed.
+The 4B model is faster but less reliable on difficult reasoning/arithmetic. Neither
+profile changes action permissions. To reproduce the fast profile, set
+`ARIANA_LOCAL_MODEL=ariana-local:4b` in both env files, then run:
+
+```sh
+ariana/.venv/bin/python ariana/scripts/setup_local_model.py --source huihui_ai/qwen3-abliterated:4b
+```
+
+Restart the companion after changing env files. Return to the stronger profile by
+setting both files to `ARIANA_LOCAL_MODEL=ariana-local:8b` and restarting.
+
+Setup also downloads **[Qwen3 0.6B](https://ollama.com/library/qwen3:0.6b)** (about
+523 MB) for local structured tool selection. It never writes Ariana's answers or
+executes tools. Separating this small classifier from the answer model avoids using
+the larger model for every routing request. It used about 597 MB resident memory
+in the measured 4K routing context. `ARIANA_LOCAL_ROUTER_MODEL` overrides this
+backend setting; an empty value disables the separate classifier. Missing router
+weights safely retain the original local answer-model routing; no automatic
+model download or cloud fallback occurs. Setup's `--skip-router` omits the download.
+
+Local now uses a shorter action prompt while sharing the complete personality,
+style preferences, memory and unchanged tool implementations. Speech starts from
+native synthesis callbacks, short sentence boundaries flush sooner, and Kokoro uses
+four CPU threads during synthesis (Whisper retains two). Readiness waits for prompt
+and voice warmup; connecting may take a little longer in exchange for preparing
+before the first user turn. There is no periodic warmup loop or background inference.
+See [timing results](local-ai-evaluation.md#latency-update) for the actual comparison.
+
 ## Switching and permissions
 
 Use the bottom-left segmented selector. Selection, loading and confirmed active

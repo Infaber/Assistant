@@ -36,7 +36,7 @@ def engines():
                     lexicon=str(kokoro / "lexicon-us-en.txt"),
                     lang="en-us",
                 ),
-                num_threads=2,
+                num_threads=4,
             )
         )
     )
@@ -100,31 +100,45 @@ class LocalSpeech(tts.ChunkedStream):
             raise ValueError("Local speech segment is too long.")
         cancelled = threading.Event()
 
-        def generate():
-            _, voice, _, lock = engines()
-            with lock:
-                if cancelled.is_set():
-                    return None
-                return voice.generate(
-                    self._input_text,
-                    sid=3,
-                    speed=1.0,
-                    callback=lambda samples, progress: int(not cancelled.is_set()),
-                )
+        loop = asyncio.get_running_loop()
+        chunks = asyncio.Queue()
+        output_emitter.initialize(
+            request_id=uuid4().hex,
+            sample_rate=24000,
+            num_channels=1,
+            mime_type="audio/pcm",
+            stream=False,
+        )
 
+        def callback(samples, progress):
+            if cancelled.is_set():
+                return 0
+            pcm = (np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes()
+            loop.call_soon_threadsafe(chunks.put_nowait, pcm)
+            return 1
+
+        def generate():
+            try:
+                _, voice, _, lock = engines()
+                with lock:
+                    if not cancelled.is_set():
+                        voice.generate(
+                            self._input_text, sid=3, speed=1.0, callback=callback
+                        )
+            finally:
+                loop.call_soon_threadsafe(chunks.put_nowait, None)
+
+        task = asyncio.create_task(asyncio.to_thread(generate))
         try:
-            audio = await asyncio.to_thread(generate)
-            if audio is None:
-                return
-            output_emitter.initialize(
-                request_id=uuid4().hex,
-                sample_rate=audio.sample_rate,
-                num_channels=1,
-                mime_type="audio/pcm",
-                stream=False,
-            )
-            pcm = (np.clip(audio.samples, -1, 1) * 32767).astype(np.int16).tobytes()
-            output_emitter.push(pcm)
+            while (pcm := await chunks.get()) is not None:
+                output_emitter.push(pcm)
+            await task  # Propagate synthesis errors instead of claiming success.
             output_emitter.flush()
         finally:
             cancelled.set()  # Native synthesis stops at its next sentence callback.
+            # The worker owns the native voice lock until synthesis has stopped.
+            # Retrieve late errors on cancellation without holding up interruption.
+            if not task.done():
+                task.add_done_callback(
+                    lambda done: done.exception() if not done.cancelled() else None
+                )

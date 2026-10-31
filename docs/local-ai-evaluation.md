@@ -82,3 +82,44 @@ The rolling context is bounded, so long unsaved conversations can lose details.
 Saved SQLite memory and action receipts use the existing shared implementations.
 LiveKit Cloud still transports room data; this is local inference, not fully offline
 operation. See [setup, privacy and limitations](local-ai.md).
+
+## Latency update
+
+After the reported slow replies, the same synthetic-output SDK harness was run
+before and after tuning on this Mac. It uses three public prompts, temporary empty
+memory/preferences, and fake Home Assistant state. It never controls a real light.
+The measurement begins when text is submitted and ends at the first output audio
+frame; it excludes microphone/STT time and excludes setup before readiness.
+
+| Request | Before: 8B, original pipeline | After: fast 4B profile and tuning |
+| --- | --- | --- |
+| Explain the blue sky in two sentences | 10.42 s | 6.00 s |
+| Two plus two, short answer (warm) | 1.78 s | 0.75 s |
+| Turn the fictional desk lights on | 15.41 s | 8.26 s |
+
+The final light check produced exactly one fake service call, followed by verified
+state and a spoken acknowledgment. No completed action was replayed. Runs vary;
+these are individual controlled comparisons, not percentile guarantees. Actual
+companion latency includes transport, STT and any personal memory context.
+
+The small router passed 11 public app/chat category checks and two context-dependent
+follow-ups after its instructions were clarified. Earlier insufficient instructions
+misclassified requests; these results are not a guarantee for all language. It only
+selects tool visibility; the normal tool guards remain authoritative. If it selects
+the wrong app, an action can be unavailable; this never authorizes a fallback effect.
+
+An isolated Kokoro comparison of the same sentence took 1.72/1.68 s with two threads,
+1.05/1.08 s with four, and 1.13/1.10 s with six. Four was chosen. This adds no idle
+CPU loop. Native callback audio is forwarded before synthesis returns, and shorter
+sentences no longer need to be merged into a longer speech chunk.
+
+The 8B reasoning-quality observations above remain valid. The faster 4B profile
+accepts its documented reasoning weakness in exchange for responsiveness. The full
+personality is shared, but the local action prompt is compact and starts replies
+with a useful short sentence. No safety implementation was removed.
+
+For this update, **474 pytest tests** passed with Ruff lint/format checks. The real
+local debugger completed a greeting and fictional ESP32 memory save/recall using
+an isolated temporary database. A cloud simulation retry was blocked by the
+simulation quota; it is not counted as passing. Physical microphone/echo and
+human-perceived latency remain unmeasured in these timing checks.

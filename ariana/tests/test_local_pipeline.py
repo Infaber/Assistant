@@ -116,7 +116,7 @@ async def test_local_speech_callback_continues_until_cancelled(monkeypatch):
 
     def generate(text, *, sid, speed, callback):
         # sherpa's actual callback uses 1=continue; 0 truncated earlier speech.
-        assert callback(np.zeros(10), 0.5) == 1
+        assert callback(np.zeros(2400), 0.5) == 1
         assert sid == 3
         return SimpleNamespace(
             samples=np.zeros(2400, dtype=np.float32), sample_rate=24000
@@ -136,3 +136,179 @@ async def test_local_speech_callback_continues_until_cancelled(monkeypatch):
         async for event in stream:
             frames.append(event.frame)
     assert sum(frame.samples_per_channel for frame in frames) >= 2400
+
+
+@pytest.mark.asyncio
+async def test_local_speech_delivers_first_chunk_before_synthesis_finishes(monkeypatch):
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from local_speech import LocalTTS
+
+    released = threading.Event()
+
+    def generate(text, *, sid, speed, callback):
+        assert callback(np.zeros(2400), 0.5) == 1
+        assert released.wait(3), "First audio was held until synthesis completed"
+        assert callback(np.zeros(2400), 1.0) == 1
+
+    monkeypatch.setattr(
+        "local_speech.engines",
+        lambda: (
+            None,
+            SimpleNamespace(generate=generate),
+            threading.Lock(),
+            threading.Lock(),
+        ),
+    )
+    async with LocalTTS().synthesize("Two sentences.") as stream:
+        try:
+            await asyncio.wait_for(anext(stream), 2)
+        finally:
+            released.set()
+        async for _ in stream:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_router_missing_model_falls_back_locally_and_keeps_context(monkeypatch):
+    import json
+
+    from local_routing import choose_group
+
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if request.url.path == "/api/show":
+            return httpx.Response(404)
+        body = json.loads(request.content)
+        assert body["model"] == local_models.local_model()
+        assert body["options"]["num_ctx"] == 16384
+        return httpx.Response(200, json={"message": {"content": '{"apps":[]}'}})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: original(transport=httpx.MockTransport(handle), **kw),
+    )
+    assert await choose_group([{"role": "user", "text": "Hello"}]) == ()
+    assert all(request.url.host == "127.0.0.1" for request in requests)
+
+
+@pytest.mark.asyncio
+async def test_router_rejects_cloud_backed_model_before_inference(monkeypatch):
+    from local_routing import choose_group
+
+    paths = []
+
+    def handle(request):
+        paths.append(request.url.path)
+        return httpx.Response(200, json={"remote_host": "https://example.invalid"})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: original(transport=httpx.MockTransport(handle), **kw),
+    )
+    with pytest.raises(ValueError, match="Cloud-backed"):
+        await choose_group([{"role": "user", "text": "Hello"}])
+    assert paths == ["/api/show"]
+
+
+def test_local_prompt_is_smaller_but_keeps_personality_and_guard_protocols(monkeypatch):
+    from instructions import configured_instructions
+    from personality import CONVERSATION
+
+    monkeypatch.setenv(
+        "ARIANA_PREFERENCES_PATH", "/tmp/ariana-empty-speed-test-prefs.json"
+    )
+    local = configured_instructions("local")
+    assert CONVERSATION in local
+    assert len(local) < len(configured_instructions()) * 0.55
+    for rule in (
+        "LATER real user",
+        "confirmed=true",
+        "revision",
+        "never blindly repeat",
+        "untrusted data",
+        "No silent cloud fallback",
+        "current_presence_verified",
+    ):
+        assert rule in local
+
+
+@pytest.mark.asyncio
+async def test_prompt_warmup_waits_for_content_and_never_executes_tools(monkeypatch):
+    from types import SimpleNamespace
+
+    from livekit.agents import llm
+
+    from local_models import prewarm_local
+
+    observed = []
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def __aiter__(self):
+            for delta in (
+                SimpleNamespace(content=None, tool_calls=[]),
+                SimpleNamespace(content="Hi", tool_calls=[]),
+            ):
+                observed.append(delta.content)
+                yield SimpleNamespace(delta=delta)
+
+    class VoiceStream(Stream):
+        async def __aiter__(self):
+            yield object()
+
+    class FakeTTS:
+        def synthesize(self, text):
+            assert text == "Ready."
+            return VoiceStream()
+
+    monkeypatch.setattr("local_speech.LocalTTS", FakeTTS)
+    calls = []
+
+    def chat(**kwargs):
+        calls.append(kwargs)
+        return Stream()
+
+    agent = SimpleNamespace(
+        tools=[], llm=SimpleNamespace(chat=chat), chat_ctx=llm.ChatContext()
+    )
+    await prewarm_local(agent)
+    assert observed == [None, "Hi"]
+    assert calls[0]["tools"] == []
+    assert not agent.chat_ctx.items  # Warmup doesn't become user conversation history.
+
+
+@pytest.mark.asyncio
+async def test_local_readiness_waits_for_warmup(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import agent
+
+    monkeypatch.setattr("local_models.local_options", lambda: {})
+    warm = AsyncMock()
+    monkeypatch.setattr("local_models.prewarm_local", warm)
+    ready = AsyncMock()
+    assistant = agent.Assistant(mode="local", on_ready=ready)
+    await assistant.on_enter()
+    warm.assert_awaited_once_with(assistant)
+    ready.assert_awaited_once_with("local")
+    warm.side_effect = RuntimeError("Unavailable")
+    ready.reset_mock()
+    with pytest.raises(RuntimeError):
+        await assistant.on_enter()
+    ready.assert_not_awaited()
