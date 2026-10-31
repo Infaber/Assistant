@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from livekit.agents import RunContext, function_tool
 
+from performance import for_session
+
 
 @dataclass
 class Receipt:
@@ -104,4 +106,8 @@ async def task_status(context: RunContext) -> dict:
     another action. This cannot confirm, reset, execute, or retry any action.
     """
     ledger = ledger_for(context)
-    return {"steps": ledger.summary() if ledger else []}
+    return {
+        "steps": ledger.summary() if ledger else [],
+        "timings": for_session(context.session).summary(),
+        "timing_scope": "Recent server-side samples only; excludes client network and speaker delay.",
+    }

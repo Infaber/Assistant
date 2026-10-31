@@ -102,3 +102,36 @@ def test_local_recovery_never_uses_configured_google_backup(monkeypatch):
     make.assert_not_called()
     session.update_agent.assert_not_called()
     assert "Nothing was sent to Gemini" in publisher.publish.call_args.args[0]["detail"]
+
+
+@pytest.mark.parametrize("local", [True, False])
+def test_retryable_error_keeps_existing_pipeline_and_never_replays(local):
+    session = Session()
+    controller = Mock()
+    session.userdata = {
+        "_ai_mode": "local" if local else "normal",
+        "_mode_controller": controller,
+    }
+    publisher, make = Mock(), Mock()
+    install_recovery(session, publisher, make)
+    session.callback(event("temporary secret provider failure", recoverable=True))
+    controller.fail_local.assert_not_called()
+    make.assert_not_called()
+    session.update_agent.assert_not_called()
+    result = publisher.publish.call_args.args[0]
+    assert result["status"] == "recovering"
+    assert "secret" not in str(result)
+    if local:
+        assert "no cloud fallback" in result["detail"]
+
+
+def test_terminal_local_failure_still_marks_mode_unavailable():
+    session = Session()
+    controller = Mock()
+    session.userdata = {"_ai_mode": "local", "_mode_controller": controller}
+    publisher, make = Mock(), Mock()
+    install_recovery(session, publisher, make)
+    session.callback(event())
+    controller.fail_local.assert_called_once()
+    assert publisher.publish.call_args.args[0]["status"] == "failed"
+    make.assert_not_called()

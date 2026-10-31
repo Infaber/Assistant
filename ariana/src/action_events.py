@@ -8,6 +8,7 @@ import time
 from contextlib import suppress
 from uuid import uuid4
 
+from performance import for_session
 from task_ledger import action_fingerprint, is_write, ledger_for
 
 TOPIC = "ariana.activity"
@@ -103,6 +104,7 @@ def observed(label):
                 context,
                 {**event, "status": "running", "detail": "Working on your request."},
             )
+            started = time.monotonic()
             try:
                 result = await function(*args, **kwargs)
             except asyncio.CancelledError:
@@ -112,6 +114,7 @@ def observed(label):
                     context,
                     {
                         **event,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
                         "status": "uncertain",
                         "detail": "Interrupted. An in-flight action may still have completed.",
                     },
@@ -124,6 +127,7 @@ def observed(label):
                     context,
                     {
                         **event,
+                        "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
                         "status": "uncertain"
                         if receipt and receipt.write
                         else "failed",
@@ -133,6 +137,12 @@ def observed(label):
                     },
                 )
                 raise
+            finally:
+                elapsed_ms = round((time.monotonic() - started) * 1000, 2)
+                event["elapsed_ms"] = elapsed_ms
+                for_session(getattr(context, "session", None)).record(
+                    "tool." + function.__name__, elapsed_ms / 1000
+                )
             status, detail = result_state(result)
             if receipt:
                 receipt.status = (

@@ -215,6 +215,7 @@ async def test_room_connects_before_session_can_publish_mode_readiness(monkeypat
     monkeypatch.setattr(agent, "Assistant", Mock())
     monkeypatch.setattr(agent, "configure_simulation_tools", Mock())
     monkeypatch.setattr(agent, "install_recovery", Mock())
+    monkeypatch.setattr(agent, "install_performance", Mock())
     monkeypatch.setattr(agent, "ActivityPublisher", Mock())
     monkeypatch.setattr(agent.ai_coustics, "audio_enhancement", lambda **kwargs: None)
     await agent.my_agent(ctx)

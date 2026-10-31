@@ -141,3 +141,10 @@ instructions go to Google. No microphone, personal memory, app tools or source
 upload is involved. Output/audio are private local files; a failed run preserves
 only completed turns and exits unsuccessfully. Use a trusted local baseline file.
 An audio export is a listening aid, not proof of good speech quality.
+
+## Everyday performance checks
+
+See [response timing and reliability](performance.md) for the isolated real-model
+benchmark, numerical session diagnostics, measured results and remaining limits.
+On a Mac with local voice/wake support installed, retain the extras when running
+checks: `uv run --project ariana --extra local-voice --extra wake-word pytest ariana/tests -q`.

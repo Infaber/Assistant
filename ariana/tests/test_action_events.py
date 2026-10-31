@@ -38,6 +38,7 @@ async def test_events_contain_no_arguments_results_or_tracebacks():
     events = [call.args[0] for call in sender.call_args_list]
     assert [e["status"] for e in events] == ["running", "verified"]
     assert events[0]["id"] == events[1]["id"]
+    assert events[1]["elapsed_ms"] >= 0
     assert "personal note" not in json.dumps(events)
 
     @observed("Test failure")

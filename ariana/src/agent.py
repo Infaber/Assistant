@@ -32,6 +32,7 @@ from mac_tools import mac_control
 from memory_tools import memory_context, memory_manage
 from model_config import realtime_model
 from notes_tools import notes_edit, notes_list, notes_read
+from performance import for_session, install_performance
 from preferences_tools import preferences_manage
 from recovery import install_recovery
 from simulation_tools import check_simulation_state, configure_simulation_tools
@@ -159,7 +160,8 @@ class Assistant(Agent):
                     for item in chat_ctx.items
                     if getattr(item, "role", None) in {"user", "assistant"}
                 ][-6:]
-                self._local_route = (turn, await choose_group(excerpts))
+                with for_session(self.session).measure("local_router"):
+                    self._local_route = (turn, await choose_group(excerpts))
             tools = visible_tools(tools, self._local_route[1])
             chat_ctx = chat_ctx.copy().truncate(max_items=24)
         async for chunk in Agent.default.llm_node(
@@ -210,6 +212,7 @@ async def my_agent(ctx: JobContext):
         ),
     )
 
+    install_performance(session)
     session.userdata["_ai_mode"] = mode
     configure_simulation_tools(ctx, session, Assistant)
 

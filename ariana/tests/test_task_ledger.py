@@ -44,3 +44,32 @@ async def test_interrupted_consequential_action_cannot_be_replayed():
         await mail_send(ctx, "Hello", confirmed=True)
     result = await mail_send(ctx, "Hello", confirmed=True)
     assert result["previous_status"] == "uncertain"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", [TimeoutError, asyncio.CancelledError])
+async def test_failed_notes_step_keeps_safari_and_blocks_second_dispatch(fault):
+    ctx = SimpleNamespace(session=SimpleNamespace(userdata={}))
+    calls = {"safari": 0, "notes": 0}
+
+    @observed("Safari result")
+    async def browser_read(context):
+        calls["safari"] += 1
+        return {"verified": True}
+
+    @observed("Create note")
+    async def notes_create(context, confirmed=False):
+        calls["notes"] += 1
+        raise fault()
+
+    await browser_read(ctx)
+    with pytest.raises(fault):
+        await notes_create(ctx, confirmed=True)
+    result = await notes_create(ctx, confirmed=True)
+    assert result["previous_status"] == "uncertain"
+    assert calls == {"safari": 1, "notes": 1}
+    assert [step["status"] for step in ledger_for(ctx).summary()] == [
+        "verified",
+        "uncertain",
+    ]
+    assert "tool.notes_create" in ctx.session.userdata["_performance"].summary()

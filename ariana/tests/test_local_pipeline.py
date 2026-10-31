@@ -246,11 +246,14 @@ def test_local_prompt_is_smaller_but_keeps_personality_and_guard_protocols(monke
 @pytest.mark.asyncio
 async def test_prompt_warmup_waits_for_content_and_never_executes_tools(monkeypatch):
     from types import SimpleNamespace
+    from unittest.mock import AsyncMock
 
     from livekit.agents import llm
 
     from local_models import prewarm_local
 
+    router = AsyncMock(return_value=())
+    monkeypatch.setattr("local_routing.choose_group", router)
     observed = []
 
     class Stream:
@@ -288,6 +291,7 @@ async def test_prompt_warmup_waits_for_content_and_never_executes_tools(monkeypa
         tools=[], llm=SimpleNamespace(chat=chat), chat_ctx=llm.ChatContext()
     )
     await prewarm_local(agent)
+    router.assert_awaited_once_with([{"role": "user", "text": "Hello"}])
     assert observed == [None, "Hi"]
     assert calls[0]["tools"] == []
     assert not agent.chat_ctx.items  # Warmup doesn't become user conversation history.
@@ -312,3 +316,47 @@ async def test_local_readiness_waits_for_warmup(monkeypatch):
     with pytest.raises(RuntimeError):
         await assistant.on_enter()
     ready.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_failed_router_warmup_cancels_other_engines(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from livekit.agents import llm
+
+    from local_models import prewarm_local
+
+    stopped = []
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def __aiter__(self):
+            try:
+                await asyncio.Event().wait()
+                yield object()
+            finally:
+                stopped.append(True)
+
+    async def fail(messages):
+        await asyncio.sleep(0)
+        raise RuntimeError("Router unavailable")
+
+    monkeypatch.setattr("local_routing.choose_group", fail)
+    monkeypatch.setattr(
+        "local_speech.LocalTTS",
+        lambda: SimpleNamespace(synthesize=lambda text: Stream()),
+    )
+    agent = SimpleNamespace(
+        tools=[],
+        llm=SimpleNamespace(chat=lambda **kw: Stream()),
+        chat_ctx=llm.ChatContext(),
+    )
+    with pytest.raises(RuntimeError, match="Router unavailable"):
+        await prewarm_local(agent)
+    assert len(stopped) == 2

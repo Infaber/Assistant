@@ -105,7 +105,7 @@ async def prewarm_local(agent):
     """Warm the real prompt and voice before publishing readiness. No effects/output."""
     from livekit.agents.llm.tool_context import is_function_tool
 
-    from local_routing import visible_tools
+    from local_routing import choose_group, visible_tools
     from local_speech import LocalTTS
 
     async def prompt():
@@ -127,4 +127,22 @@ async def prewarm_local(agent):
             async for _ in stream:
                 pass  # Warm kernels, never play a fabricated acknowledgment.
 
-    await asyncio.wait_for(asyncio.gather(prompt(), voice()), timeout=25)
+    # The router is on every first-turn critical path too. Warm its actual
+    # classifier prompt locally; discard the selection without running any tools.
+    tasks = [
+        asyncio.create_task(work)
+        for work in (
+            prompt(),
+            voice(),
+            choose_group([{"role": "user", "text": "Hello"}]),
+        )
+    ]
+    try:
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=25)
+    finally:
+        # gather alone doesn't cancel siblings when one engine fails. Don't leave
+        # speech/model warmups running after a failed or cancelled startup.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

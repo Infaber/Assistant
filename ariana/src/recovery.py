@@ -36,7 +36,21 @@ def install_recovery(session, publisher, make_agent):
     @session.on("error")
     def on_error(event):
         nonlocal attempted_backup
-        if (getattr(session, "userdata", None) or {}).get("_ai_mode") == "local":
+        local = (getattr(session, "userdata", None) or {}).get("_ai_mode") == "local"
+        if getattr(event.error, "recoverable", False):
+            publisher.publish(
+                {
+                    "id": uuid4().hex,
+                    "kind": "system",
+                    "label": "Local AI" if local else "Voice connection",
+                    "status": "recovering",
+                    "detail": "The local provider is retrying. No actions are being replayed; no cloud fallback."
+                    if local
+                    else "The voice provider is reconnecting. No actions are being replayed.",
+                }
+            )
+            return
+        if local:
             controller = session.userdata.get("_mode_controller")
             if controller:
                 controller.fail_local(
@@ -53,17 +67,6 @@ def install_recovery(session, publisher, make_agent):
             )
             return
         code, detail = describe_failure(event.error)
-        if getattr(event.error, "recoverable", False):
-            publisher.publish(
-                {
-                    "id": uuid4().hex,
-                    "kind": "system",
-                    "label": "Voice connection",
-                    "status": "recovering",
-                    "detail": "The voice provider is reconnecting. No actions are being replayed.",
-                }
-            )
-            return
         backup = os.getenv("ARIANA_FALLBACK_GOOGLE_MODEL", "").strip()
         primary = configured_model()
         if (
