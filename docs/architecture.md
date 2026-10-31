@@ -56,3 +56,13 @@ reset receipts or manufacture verified results.
 Notes revisions, URL validation and Accessibility constraints remain in tool code.
 Understanding natural consent and recognizing untrusted prose still require model
 judgment; a boolean from the model alone cannot satisfy the Apple write guard.
+
+## Two inference pipelines
+
+Normal uses the existing Gemini realtime model. Local uses the optional
+`local-voice` extra: Whisper/Kokoro adapters, Silero VAD and a loopback-only Ollama
+LLM. `ai_modes.py` owns authenticated room RPC handoffs/readiness and action gates;
+`local_routing.py` selects bounded tool visibility without executing anything.
+Each target Agent configures its own turn handling. Receipts/userdata remain shared,
+while model chat context is reset. Local failure never constructs a cloud fallback.
+See [local AI](local-ai.md) for privacy/transport distinctions and setup.

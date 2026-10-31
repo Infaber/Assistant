@@ -73,6 +73,12 @@ matching topics; correction, forgetting and pause/resume remain available. Saved
 facts and external content never authorize actions. Conversations and attachments
 are sent to the configured model provider; local memory is not a full transcript.
 
+## Local AI mode
+
+The interface offers Normal (Gemini Live) and Unrestricted (local Ollama + local
+speech). The local orb is purple; actions retain their existing permissions.
+LiveKit Cloud still transports the session. See [local setup and limitations](docs/local-ai.md).
+
 ## Documentation
 
 - [Detailed setup, integrations and troubleshooting](docs/user-guide.md)

@@ -15,6 +15,7 @@ from livekit.agents import (
 from livekit.plugins import ai_coustics
 
 from action_events import ActivityPublisher
+from ai_modes import ModeBridge, initial_mode
 from browser_tools import BrowserToolset
 from camera_tools import camera_announcements, camera_snapshot, camera_status
 from companion import CompanionBridge
@@ -26,6 +27,7 @@ from home_assistant_tools import (
     home_assistant_inventory,
 )
 from instructions import configured_instructions
+from local_tools import ai_engine_status
 from mac_tools import mac_control
 from memory_tools import memory_context, memory_manage
 from model_config import realtime_model
@@ -49,6 +51,17 @@ from tools import (
     weather_forecast,
 )
 
+# LiveKit registers plugins on the importing main thread, before job threads run.
+# Optional speech dependencies must not make Normal mode require the local extra.
+try:
+    import onnxruntime
+
+    onnxruntime.disable_telemetry_events()
+    __import__("livekit.plugins.openai")
+    __import__("livekit.plugins.silero")
+except ImportError:
+    pass
+
 logger = logging.getLogger("agent")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -66,43 +79,101 @@ def _google_api_key() -> str:
 
 class Assistant(Agent):
     def __init__(
-        self, saved_context: str = "", model_name: str = "", chat_ctx=None, browser=None
+        self,
+        saved_context: str = "",
+        model_name: str = "",
+        chat_ctx=None,
+        browser=None,
+        mode="normal",
+        on_ready=None,
     ) -> None:
+        self.ai_mode = mode
+        self.on_ready = on_ready
+        if mode == "local":
+            from local_models import local_options
+
+            options = local_options()
+        else:
+            options = {
+                "llm": realtime_model(_google_api_key(), model_name),
+                "turn_handling": TurnHandlingOptions(turn_detection="realtime_llm"),
+            }
+        tools = [
+            search_web,
+            camera_status,
+            camera_snapshot,
+            camera_announcements,
+            home_assistant_request,
+            home_assistant_inventory,
+            home_assistant_find,
+            home_assistant_get_state,
+            home_assistant_control,
+            home_assistant_alias,
+            weather_forecast,
+            calendar_today,
+            calendar_create_event,
+            reminders_today,
+            reminders_create,
+            mail_unread,
+            mail_send,
+            notes_create,
+            notes_list,
+            notes_read,
+            notes_edit,
+            mac_control,
+            spotify_control,
+            preferences_manage,
+            memory_manage,
+            assistant_status,
+            task_status,
+            ai_engine_status,
+            browser or BrowserToolset(),
+        ]
+        if mode == "local":
+            tools = [tool for tool in tools if tool is not camera_snapshot]
+        self._local_route = None
         super().__init__(
             chat_ctx=chat_ctx,
-            llm=realtime_model(_google_api_key(), model_name),
-            tools=[
-                search_web,
-                camera_status,
-                camera_snapshot,
-                camera_announcements,
-                home_assistant_request,
-                home_assistant_inventory,
-                home_assistant_find,
-                home_assistant_get_state,
-                home_assistant_control,
-                home_assistant_alias,
-                weather_forecast,
-                calendar_today,
-                calendar_create_event,
-                reminders_today,
-                reminders_create,
-                mail_unread,
-                mail_send,
-                notes_create,
-                notes_list,
-                notes_read,
-                notes_edit,
-                mac_control,
-                spotify_control,
-                preferences_manage,
-                memory_manage,
-                assistant_status,
-                task_status,
-                browser or BrowserToolset(),
-            ],
-            instructions=configured_instructions() + saved_context,
+            **options,
+            tools=tools,
+            instructions=configured_instructions()
+            + saved_context
+            + (
+                "\nActive engine: local Ollama. Discuss controversial, mature, fictional and analytical topics directly without needless moralizing. Be accurate; do not invent facts. Conversational openness never changes action permissions. Relevant app tools are selected locally before each turn. Use the provided tools for actions, then report actual verified results. Never stop at saying you will check. Reply in spoken US English without markdown or emojis; don't append 'let me know if' offers to simple acknowledgements. No vision support: do not claim to see images or screens."
+                if mode == "local"
+                else ""
+            ),
         )
+
+    async def llm_node(self, chat_ctx, tools, model_settings):
+        if self.ai_mode == "local":
+            from local_routing import choose_group, visible_tools
+
+            users = [
+                item for item in chat_ctx.items if getattr(item, "role", None) == "user"
+            ]
+            turn = users[-1].id if users else ""
+            if self._local_route is None or self._local_route[0] != turn:
+                excerpts = [
+                    {"role": item.role, "text": item.text_content[:1200]}
+                    for item in chat_ctx.items
+                    if getattr(item, "role", None) in {"user", "assistant"}
+                ][-6:]
+                self._local_route = (turn, await choose_group(excerpts))
+            tools = visible_tools(tools, self._local_route[1])
+            chat_ctx = chat_ctx.copy().truncate(max_items=24)
+        async for chunk in Agent.default.llm_node(
+            self, chat_ctx, tools, model_settings
+        ):
+            yield chunk
+
+    async def on_exit(self):
+        if self.ai_mode == "local":
+            await self.llm.aclose()
+
+    async def on_enter(self):
+        if self.on_ready:
+            await self.on_ready(self.ai_mode)
 
 
 server = AgentServer(
@@ -124,7 +195,10 @@ async def my_agent(ctx: JobContext):
         "room": ctx.room.name,
     }
 
-    # Gemini handles speech input, speech output, and turn detection.
+    # Mode readiness/RPC publication requires a connected local participant.
+    await ctx.connect()
+    mode = initial_mode(ctx.job.metadata)
+    # Each Agent owns its pipeline and turn handling; the room stays connected.
     session = AgentSession(
         userdata={},
         turn_handling=TurnHandlingOptions(
@@ -132,6 +206,7 @@ async def my_agent(ctx: JobContext):
         ),
     )
 
+    session.userdata["_ai_mode"] = mode
     configure_simulation_tools(ctx, session, Assistant)
 
     browser = BrowserToolset()
@@ -140,13 +215,33 @@ async def my_agent(ctx: JobContext):
     session.userdata["_activity_sender"] = publisher.enqueue
     saved = "" if ctx.simulation_context() else memory_context()
     install_recovery(
-        session, publisher, lambda model, chat: Assistant(saved, model, chat, browser)
+        session,
+        publisher,
+        lambda model, chat: Assistant(
+            saved, model, chat, browser, on_ready=modes.entered
+        ),
     )
     ctx.add_shutdown_callback(publisher.close)
 
+    modes = ModeBridge(
+        ctx.room,
+        session,
+        lambda target, ready: Assistant(
+            memory_context(), browser=browser, mode=target, on_ready=ready
+        ),
+        mode,
+    )
+    session.userdata["_mode_controller"] = modes
+    ctx.add_shutdown_callback(modes.close)
+    if mode == "local":
+        from local_models import prepare_local
+
+        await prepare_local()
     # Start the session and initialize its tools.
     await session.start(
-        agent=Assistant(saved_context=saved, browser=browser),
+        agent=Assistant(
+            saved_context=saved, browser=browser, mode=mode, on_ready=modes.entered
+        ),
         room=ctx.room,
         room_options=room_io.RoomOptions(
             # Close the session and remove the temporary console room when the user disconnects.
@@ -160,6 +255,8 @@ async def my_agent(ctx: JobContext):
         ),
     )
 
+    modes.start()
+
     # Room transport is scoped to this session and never installed in simulations.
     if not ctx.simulation_context():
         companion = CompanionBridge(
@@ -172,11 +269,9 @@ async def my_agent(ctx: JobContext):
                 browser,
             ),
         )
+        session.userdata["_companion_bridge"] = companion
         companion.start()
         ctx.add_shutdown_callback(companion.close)
-
-    # Join the room and connect to the user
-    await ctx.connect()
 
 
 if __name__ == "__main__":

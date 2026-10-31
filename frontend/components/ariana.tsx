@@ -35,6 +35,8 @@ import {
 } from "lucide-react";
 import { assistantName } from "../lib/persona";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
+import { useAIMode } from "./use-ai-mode";
+import { type AIMode } from "../lib/ai-mode";
 import { useThinkingFeedback } from "./use-thinking-feedback";
 
 import {
@@ -64,6 +66,14 @@ function friendlyError(error: unknown) {
 }
 
 export default function Ariana() {
+  const [selectedMode, setSelectedMode] = useState<AIMode>("normal");
+  const modeRef = useRef<AIMode>("normal");
+  useEffect(() => {
+    try { if (localStorage.getItem("ariana-ai-mode")==="local") {modeRef.current="local";setSelectedMode("local");} } catch {}
+  }, []);
+  function requestMode(mode: AIMode) {modeRef.current=mode;setSelectedMode(mode);}
+  function confirmMode(mode: AIMode) {requestMode(mode);try {localStorage.setItem("ariana-ai-mode",mode);} catch {}}
+
   const accessCode = useRef(desktopConfig()?.accessCode || "");
   const credentials = useRef({ serverUrl: "", participantToken: "" });
   const [ready] = useState(() => {
@@ -86,8 +96,9 @@ export default function Ariana() {
   async function prepare(signal: AbortSignal) {
     const response = await fetch("/api/connection", {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessCode.current}` },
-      signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+      headers: { Authorization: `Bearer ${accessCode.current}`, "Content-Type":"application/json" },
+      body: JSON.stringify({mode:modeRef.current}),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
     });
     const data = await response.json();
     if (!response.ok)
@@ -100,13 +111,16 @@ export default function Ariana() {
     ready.resolve();
   }
   const session = useSession(tokenSource, {
-    agentConnectTimeoutMilliseconds: 30_000,
+    agentConnectTimeoutMilliseconds: 90_000,
   });
   return (
     <SessionProvider session={session}>
       <Workspace
         session={session}
         prepare={prepare}
+        selectedMode={selectedMode}
+        onModeRequest={requestMode}
+        onModeConfirmed={confirmMode}
         onCodeChange={(code) => {
           accessCode.current = code.trim();
         }}
@@ -120,12 +134,15 @@ function Workspace({
   session,
   prepare,
   onCodeChange,
+  selectedMode, onModeRequest, onModeConfirmed,
 }: {
   session: UseSessionReturn;
   prepare: (signal: AbortSignal) => Promise<void>;
   onCodeChange: (value: string) => void;
+  selectedMode: AIMode; onModeRequest: (mode: AIMode) => void; onModeConfirmed: (mode: AIMode) => void;
 }) {
   const agent = useAgent(session);
+  const ai = useAIMode(session.room, selectedMode, onModeRequest, onModeConfirmed, async()=>{await session.end();await start(true);});
   const { messages, send, isSending } = useSessionMessages(session);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } =
     useLocalParticipant();
@@ -148,7 +165,7 @@ function Workspace({
   const [activity, setActivity] = useState<Activity[]>([]);
   const feedbackLevel = useThinkingFeedback(
     session.isConnected && agent.state === "thinking",
-    feedback && hasRunningAction(activity),
+    feedback && ai.status?.mode !== "local" && hasRunningAction(activity),
     inputLevel,
   );
   const [providerError, setProviderError] = useState("");
@@ -527,7 +544,7 @@ function Workspace({
           !policy.terminal
         )
           void session.end();
-      }, 30000);
+      }, selectedMode === "local" ? 90000 : 30000);
       return () => window.clearTimeout(timer);
     }
     if (connecting || reconnecting) return;
@@ -678,6 +695,15 @@ function Workspace({
       }}
     >
       <h1 className="sr-only">{assistantName}</h1>
+      <div className="ai-mode-control" aria-label="AI mode">
+        <div className="ai-mode-segments">
+          <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal")}>Normal</button>
+          <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local")}>Unrestricted</button>
+        </div>
+        <p role="status">{ai.pending || ai.status?.state==="loading" ? `Loading selected engine… · active: ${ai.status?.mode==="local" ? "Local AI" : "Gemini Live"}` : ai.status ? `${ai.status.mode==="local" ? "Local AI" : "Gemini Live"} · ${ai.status.model}${ai.status.state==="error" ? " · check connection" : ""}` : `Selected: ${selectedMode==="local" ? "Local AI" : "Gemini Live"} · ${connecting ? "Connecting…" : "Connect to start"}`}</p>
+        {ai.error && <p role="alert" className="mode-error">{ai.error}</p>}
+        <details><summary>Mode privacy</summary>Switching starts fresh conversation context and discards staged attachments. Saved memories are shared; Normal Mode sends relevant memories to Gemini. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
+      </div>
       <div className="orb-center">
         <button
           className="orb-touch"
@@ -695,6 +721,7 @@ function Workspace({
           disabled={connecting}
         >
           <ArianaOrb
+            mode={ai.status?.mode || "normal"}
             style={orbStyle}
             state={orbState}
             level={
@@ -781,9 +808,10 @@ function Workspace({
         aria-hidden={!inputOpen}
       >
         <SharingComposer
+          key={ai.status?.mode || "connecting"}
           participant={localParticipant}
           destination={agent.isConnected ? agent.identity : undefined}
-          ready={agent.isConnected && !isSending && !providerError}
+          ready={agent.isConnected && !isSending && !providerError && !ai.pending && ai.status?.state!=="loading"}
           draft={draft}
           setDraft={setDraft}
           inputRef={composer}
@@ -906,7 +934,7 @@ function Workspace({
             </>
           )}
           <button
-            disabled={!connected || mediaBusy}
+            disabled={!connected || mediaBusy || ai.status?.mode === "local"}
             onClick={() => {
               void media(() =>
                 localParticipant.setScreenShareEnabled(!isScreenShareEnabled, {

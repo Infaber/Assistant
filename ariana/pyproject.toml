@@ -19,6 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+local-voice = [
+    "livekit-plugins-openai~=1.8",
+    "livekit-plugins-silero~=1.8",
+    "sherpa-onnx==1.13.8",
+    "sherpa-onnx-core==1.13.8",
+]
 # Keep the native core explicit: upstream sdist metadata can omit it in uv locks.
 wake-word = [
     "sherpa-onnx==1.13.8",

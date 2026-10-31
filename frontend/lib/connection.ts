@@ -1,3 +1,4 @@
+import { preflightLocal } from './local-preflight';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { AccessToken, RoomAgentDispatch, RoomConfiguration, TrackSource } from 'livekit-server-sdk';
 
@@ -28,7 +29,7 @@ function error(message: string, status: number) {
 
 // A personal frontend uses a shared access code. A multi-user deployment should
 // replace this gate with its own authenticated user/session check.
-export async function createConnection(request: Request, env: Environment = process.env) {
+export async function createConnection(request: Request, env: Environment = process.env, checkLocal = preflightLocal) {
   if (!allowedOrigin(request, env)) return error('This request is not allowed.', 403);
 
   const code = env.ARIANA_ACCESS_CODE?.trim();
@@ -57,6 +58,19 @@ export async function createConnection(request: Request, env: Environment = proc
     return error('LIVEKIT_URL must be a valid ws:// or wss:// address.', 503);
   }
 
+  let mode = 'normal';
+  if (request.headers.get('content-type')?.includes('application/json')) {
+    try {
+      const body = await request.json();
+      mode = body.mode ?? 'normal';
+    } catch { return error('Invalid connection request.', 400); }
+    if (!['normal','local'].includes(mode)) return error('Choose Normal or Unrestricted Mode.',400);
+  }
+
+  if (mode === 'local') {
+    try { await checkLocal(env); } catch (failure) { return error(failure instanceof Error ? failure.message : 'Local AI is unavailable.',503); }
+  }
+
   // Room, identity, and dispatch are server-owned: callers cannot join another
   // user's room or select a different agent by changing a request payload.
   const roomName = `ariana-${randomUUID()}`;
@@ -69,7 +83,7 @@ export async function createConnection(request: Request, env: Environment = proc
     canPublishSources: [TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE],
   });
   token.roomConfig = new RoomConfiguration({
-    agents: [new RoomAgentDispatch({ agentName: env.LIVEKIT_AGENT_NAME?.trim() || 'ariana' })],
+    agents: [new RoomAgentDispatch({ agentName: env.LIVEKIT_AGENT_NAME?.trim() || 'ariana', metadata: JSON.stringify({mode}) })],
     emptyTimeout: 60, departureTimeout: 20, maxParticipants: 2,
   });
   return Response.json({ server_url: serverUrl, participant_token: await token.toJwt() }, {

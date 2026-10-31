@@ -36,6 +36,22 @@ def install_recovery(session, publisher, make_agent):
     @session.on("error")
     def on_error(event):
         nonlocal attempted_backup
+        if (getattr(session, "userdata", None) or {}).get("_ai_mode") == "local":
+            controller = session.userdata.get("_mode_controller")
+            if controller:
+                controller.fail_local(
+                    "Local AI or speech failed. Check Ollama/local speech setup, or explicitly select Normal Mode. Nothing was sent to Gemini."
+                )
+            publisher.publish(
+                {
+                    "id": uuid4().hex,
+                    "kind": "system",
+                    "label": "Local AI",
+                    "status": "failed",
+                    "detail": "Local AI or speech failed. Check Ollama/local speech setup, or explicitly select Normal Mode. Nothing was sent to Gemini.",
+                }
+            )
+            return
         code, detail = describe_failure(event.error)
         if getattr(event.error, "recoverable", False):
             publisher.publish(

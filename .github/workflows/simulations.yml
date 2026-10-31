@@ -64,3 +64,5 @@ jobs:
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-companionship.yaml
       - name: Check extended conversational coverage
         run: lk agent simulate text --concurrency 1 --scenarios scenarios-conversation-v2.yaml
+      - name: Check trusted engine switching and local privacy boundaries
+        run: lk agent simulate text --concurrency 1 --scenarios scenarios-local-mode.yaml

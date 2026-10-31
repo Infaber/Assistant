@@ -59,6 +59,22 @@ def observed(label):
         @functools.wraps(function)
         async def run(*args, **kwargs):
             context = signature.bind_partial(*args, **kwargs).arguments.get("context")
+            try:
+                state = (
+                    context.session.userdata if context is not None else None
+                ) or {}
+            except (ValueError, AttributeError):
+                state = {}
+            if (
+                context is not None
+                and function.__name__ == "camera_snapshot"
+                and state.get("_ai_mode") == "local"
+            ):
+                return {
+                    "error": "This local model has no vision support. No snapshot was captured or sent to Gemini."
+                }
+            if context is not None and state.get("_mode_switching"):
+                return {"error": "AI mode is switching. No new action was dispatched."}
             event = {"id": uuid4().hex, "label": label, "kind": "action"}
             bound = signature.bind_partial(*args, **kwargs)
             bound.apply_defaults()

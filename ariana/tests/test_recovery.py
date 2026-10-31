@@ -89,3 +89,16 @@ def test_failed_handoff_keeps_terminal_error(monkeypatch):
     session.callback(failure)
     assert not failure.error.recoverable
     assert publisher.publish.call_args.args[0]["status"] == "failed"
+
+
+def test_local_recovery_never_uses_configured_google_backup(monkeypatch):
+    monkeypatch.setenv("ARIANA_FALLBACK_GOOGLE_MODEL", "backup")
+    session = Session()
+    session.userdata = {"_ai_mode": "local"}
+    publisher = Mock()
+    make = Mock()
+    install_recovery(session, publisher, make)
+    session.callback(event())
+    make.assert_not_called()
+    session.update_agent.assert_not_called()
+    assert "Nothing was sent to Gemini" in publisher.publish.call_args.args[0]["detail"]

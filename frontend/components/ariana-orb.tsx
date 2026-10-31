@@ -11,10 +11,12 @@ export const orbStyles = [
 export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 const TAU = Math.PI * 2;
 export default function ArianaOrb({
+  mode = "normal",
   style = 0,
   state = "idle",
   level = 0,
 }: {
+  mode?: "normal" | "local";
   style?: number;
   state?: OrbState;
   level?: number;
@@ -320,6 +322,7 @@ export default function ArianaOrb({
       ref={canvas}
       className="ariana-orb"
       aria-hidden="true"
+      data-mode={mode}
       data-style={style}
       data-state={state}
     />

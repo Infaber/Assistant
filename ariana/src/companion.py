@@ -149,6 +149,7 @@ class CompanionBridge:
         key = reader.info.stream_id
         if (
             not self.authorized(identity)
+            or self.session.userdata.get("_mode_switching")
             or key in self.uploads
             or len(self.uploads) >= MAX_FILES
             or self.total_files >= MAX_SESSION_FILES
@@ -191,6 +192,10 @@ class CompanionBridge:
         if not self.authorized(invocation.caller_identity):
             return json.dumps(
                 {"error": "Only the connected user can share attachments."}
+            )
+        if self.session.userdata.get("_mode_switching"):
+            return json.dumps(
+                {"error": "Wait for the AI mode change before sharing attachments."}
             )
         try:
             payload = json.loads(invocation.payload)
@@ -235,6 +240,14 @@ class CompanionBridge:
                     asyncio.gather(*(asyncio.shield(entry[2]) for entry in entries)),
                     timeout=8,
                 )
+                if self.session.userdata.get("_ai_mode") == "local" and any(
+                    not isinstance(part, str)
+                    for result in results
+                    for part in result.get("content", [])
+                ):
+                    raise ValueError(
+                        "This local model supports text/documents, not pictures. No image was sent to a cloud model."
+                    )
                 if errors := [r["error"] for r in results if "error" in r]:
                     # A rejected batch must not fill the inbox and block replacements.
                     for key in ids:
@@ -252,6 +265,13 @@ class CompanionBridge:
                 if self.context_chars + added_chars > 80000:
                     raise ValueError(
                         "This conversation has reached its document text limit. Start a new conversation."
+                    )
+                if (
+                    self.session.userdata.get("_ai_mode") == "local"
+                    and added_chars > 12000
+                ):
+                    raise ValueError(
+                        "Local document context is limited to 12,000 characters per message. Send a shorter excerpt."
                     )
                 # Realtime generate_reply(ChatMessage) drops images in SDK 1.8.
                 # Use the documented multimodal chat-context update instead.
@@ -316,8 +336,10 @@ class CompanionBridge:
             and not self.uploads
             and not delivery_pending(self.session)
         )
-        return proactive_allowed(self.session) and self.policy.due(
-            time.monotonic(), hour, idle=idle
+        return (
+            not self.session.userdata.get("_mode_switching")
+            and proactive_allowed(self.session)
+            and self.policy.due(time.monotonic(), hour, idle=idle)
         )
 
     async def check_in_loop(self):
@@ -343,6 +365,7 @@ class CompanionBridge:
             # and session userdata without generating speech or replaying actions.
             if (
                 self.refresh_agent is not None
+                and self.session.userdata.get("_ai_mode", "normal") == "normal"
                 and idle
                 and (
                     (self.policy.enabled and now < self.policy.lease_until)

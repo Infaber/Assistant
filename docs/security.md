@@ -31,3 +31,14 @@ rotate it first: deleting the current file does not remove it from Git history.
 Private local logs and ignored env files were not published or printed. Screenshot
 or transcript contents can still be sent to configured model providers when the
 user shares them; local memory is not an offline-only conversation guarantee.
+
+## Local mode
+
+Conversational filtering and operating-system authorization are separate. Local
+uses existing guarded tools and never gains a shell executor. Switching gates new
+actions, refuses active receipts/image delivery/transfers, retains completed action
+receipts and invalidates pending approvals/snapshots. It starts fresh model context;
+saved SQLite memories/preferences remain shared and may enter Normal mode.
+Ollama URLs must be HTTP loopback; proxies/redirects and cloud-backed models are
+rejected. Local images/screens are disabled. No automatic cloud fallback is allowed.
+LiveKit Cloud still carries the session; local inference is not an offline guarantee.

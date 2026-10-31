@@ -330,3 +330,22 @@ test("native auth failure waits for explicit reconnect", async ({ page }) => {
   await page.waitForTimeout(2500);
   expect(requests).toBe(1);
 });
+
+test('local selection remains selected, not active, when backend startup fails', async ({page}) => {
+  let requested='';
+  await page.route('**/api/connection',async route=>{
+    requested=JSON.parse(route.request().postData() || '{}').mode;
+    await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Local model unavailable. Start Ollama.'})});
+  });
+  await page.goto('/');
+  await page.getByRole('button',{name:'Unrestricted',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Unrestricted',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('canvas.ariana-orb')).toHaveAttribute('data-mode','normal');
+  expect(await page.evaluate(()=>localStorage.getItem('ariana-ai-mode'))).toBeNull();
+  await page.getByRole('button',{name:'Start conversation',exact:true}).first().click();
+  await expect(page.getByText('Local model unavailable. Start Ollama.',{exact:true})).toBeVisible();
+  expect(requested).toBe('local');
+  await expect(page.locator('canvas.ariana-orb')).toHaveAttribute('data-mode','normal');
+  await page.getByRole('button',{name:'Normal',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Normal',exact:true})).toHaveAttribute('aria-pressed','true');
+});

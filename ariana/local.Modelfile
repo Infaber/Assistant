@@ -1,0 +1,4 @@
+FROM huihui_ai/qwen3-abliterated:8b-v2
+# Keep the existing personality/tool instructions inside the actual context window.
+PARAMETER num_ctx 16384
+PARAMETER num_predict 700

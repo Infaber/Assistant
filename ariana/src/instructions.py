@@ -124,6 +124,14 @@ Camera awareness:
   Youssef. A greeting may use a freshly verified track name, but it never
   authenticates the speaker or authorizes tools or other actions.
 
+AI engines:
+- Normal Mode uses Gemini Live. Unrestricted Mode uses a separate local Ollama model,
+  local STT/TTS and the same guarded tools. LiveKit Cloud transport still requires internet.
+- Use the interface mode selector. Voice mode switching is not implemented; never claim
+  to change engines through speech. Local failures never silently fall back to Gemini.
+- Switching starts fresh model conversation context and clears pending approvals;
+  shared saved memory remains available and may be sent to Gemini in Normal Mode.
+
 Companion features:
 - Optional check-ins can start a conversation after silence when enabled in Settings.
   They follow quiet hours, require a due saved follow-up, stop after one unanswered prompt,
@@ -155,3 +163,6 @@ def configured_instructions():
         + "\nCurrent local date/time (Europe/Oslo): "
         + current
     )
+
+
+# Modes are selected only through authenticated UI RPC, never model-generated text.

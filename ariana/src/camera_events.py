@@ -229,6 +229,10 @@ class CameraEventBridge:
             raise
 
     async def flush_pending(self):
+        if (getattr(self.companion.session, "userdata", None) or {}).get(
+            "_mode_switching"
+        ):
+            return
         if not self.pending or self.speaking:
             return
         text, deadline = self.pending

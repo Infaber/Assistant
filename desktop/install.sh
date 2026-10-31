@@ -8,13 +8,17 @@ if pgrep -x Ariana >/dev/null; then
 fi
 mkdir -p "$app_root/Contents/MacOS" "$app_root/Contents/Resources"
 cd "$project_root/ariana"
+local_extras=()
+if [[ "${1:-}" == "--local-voice" ]] || { [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("livekit.plugins.silero") else 1)'; }; then
+  local_extras=(--extra local-voice)
+fi
 # Preserve an existing optional wake installation during ordinary upgrades.
-if [[ "${1:-}" == "--wake-word" ]] || { [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("sherpa_onnx") or importlib.util.find_spec("pvporcupine") else 1)'; }; then
-  uv sync --locked --extra wake-word
+if [[ "${1:-}" == "--wake-word" ]] || { [[ -x .venv/bin/python ]] && .venv/bin/python -c 'import importlib.util,sys; sys.exit(0 if importlib.util.find_spec("sounddevice") or importlib.util.find_spec("pvporcupine") else 1)'; }; then
+  uv sync --locked --extra wake-word "${local_extras[@]}"
   .venv/bin/python scripts/setup_wake_word.py
   .venv/bin/python src/wake_word.py --check
 else
-  uv sync --locked
+  uv sync --locked "${local_extras[@]}"
 fi
 cd "$project_root/frontend"
 npm ci
