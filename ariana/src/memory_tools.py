@@ -31,6 +31,9 @@ class MemoryStore:
     def run(self, request: dict) -> dict:
         action = request["action"]
         kind, retention, follow = lifecycle.validate(request)
+        importance = request.get("importance", 0)
+        if type(importance) is not int or not 0 <= importance <= 5:
+            raise ValueError("Importance must be 1..5, or 0 to preserve the default.")
         topic = request.get("topic", "").strip().casefold()
         fact = request.get("fact", "").strip()
         query = request.get("query", "").strip()
@@ -94,6 +97,48 @@ class MemoryStore:
                         "error": "Memory saving is paused. Resume only when the user asks.",
                         "paused": True,
                     }
+                existing_fact = db.execute(
+                    "SELECT fact FROM facts WHERE topic=?", (topic,)
+                ).fetchone()
+                normalized = " ".join(fact.casefold().split())
+                duplicate = next(
+                    (
+                        saved_topic
+                        for saved_topic, saved_fact in db.execute(
+                            "SELECT topic,fact FROM facts WHERE topic<>?", (topic,)
+                        )
+                        if " ".join(saved_fact.casefold().split()) == normalized
+                    ),
+                    None,
+                )
+                if duplicate:
+                    return {
+                        "error": "This fact already exists. Recall the existing topic before updating it.",
+                        "duplicate_topic": duplicate,
+                    }
+                unchanged = existing_fact and existing_fact[0] == fact
+                old_kind = db.execute(
+                    "SELECT kind FROM memory_details WHERE topic=?", (topic,)
+                ).fetchone()
+                metadata_change = (
+                    (kind and kind != (old_kind[0] if old_kind else "fact"))
+                    or retention
+                    or follow is not None
+                )
+                if action == "remember" and unchanged and not metadata_change:
+                    if not old_kind:
+                        lifecycle.save(db, topic, kind, 0, None)
+                    if importance:
+                        db.execute(
+                            "UPDATE memory_details SET importance=? WHERE topic=?",
+                            (importance, topic),
+                        )
+                    return {
+                        "success": True,
+                        "paused": False,
+                        "memories": [{"topic": topic, "fact": fact}],
+                        "details": lifecycle.details(db, [(topic, fact)]),
+                    }
                 count = db.execute("SELECT count(*) FROM facts").fetchone()[0]
                 exists = db.execute(
                     "SELECT 1 FROM facts WHERE topic=?", (topic,)
@@ -120,11 +165,22 @@ class MemoryStore:
                 )
                 if changed:
                     lifecycle.save(db, topic, kind, retention, follow)
+                if importance:
+                    db.execute(
+                        "UPDATE memory_details SET importance=? WHERE topic=?",
+                        (importance, topic),
+                    )
             elif action == "forget":
                 db.execute("DELETE FROM facts WHERE topic=?", (topic,))
             rows = db.execute(
                 "SELECT topic,fact FROM facts ORDER BY updated DESC,topic"
             ).fetchall()
+            if action != "recall":
+                rows = (
+                    [row for row in rows if row[0] == topic]
+                    if action in {"remember", "progress"}
+                    else []
+                )
             if action == "recall" and topic:
                 rows = [
                     row for row in rows if topic in row[0] or topic in row[1].casefold()
@@ -146,7 +202,11 @@ class MemoryStore:
                     )
                     for item in typed
                 ]
-                ranked = relevant_memories(documents, query)
+                ranked = relevant_memories(
+                    documents,
+                    query,
+                    importance={item["topic"]: item["importance"] for item in typed},
+                )
                 current = dict(rows)
                 memories = [
                     {"topic": item["topic"], "fact": current[item["topic"]]}
@@ -162,9 +222,10 @@ class MemoryStore:
                 "details": [item for item in typed if item["topic"] in selected],
             }
 
-    def follow_up(self):
+    def follow_up(self, minimum_importance=1):
         import time
 
+        lifecycle.validate_importance_threshold(minimum_importance)
         data = self.run({"action": "recall"})
         if data.get("paused"):
             return None
@@ -174,12 +235,25 @@ class MemoryStore:
             if item["follow_up_at"] is not None
             and item["follow_up_at"] <= time.time()
             and not item["followed_up"]
+            and item["importance"] >= minimum_importance
         ]
-        return min(due, key=lambda item: item["follow_up_at"]) if due else None
+        return (
+            min(
+                due,
+                key=lambda item: (
+                    -item["importance"],
+                    item["follow_up_at"],
+                    item["topic"],
+                ),
+            )
+            if due
+            else None
+        )
 
-    def claim_follow_up(self, item, minimum_gap=1800):
+    def claim_follow_up(self, item, minimum_gap=1800, minimum_importance=1):
         import time
 
+        lifecycle.validate_importance_threshold(minimum_importance)
         with sqlite3.connect(self.path, timeout=10) as db:
             db.execute("BEGIN IMMEDIATE")
             if db.execute(
@@ -192,8 +266,14 @@ class MemoryStore:
             if previous and time.time() - float(previous[0]) < minimum_gap:
                 return False
             cursor = db.execute(
-                "UPDATE memory_details SET followed_up=1 WHERE topic=? AND revision=? AND followed_up=0 AND follow_up_at<=? AND (expires_at IS NULL OR expires_at>?)",
-                (item["topic"], item["revision"], time.time(), time.time()),
+                "UPDATE memory_details SET followed_up=1 WHERE topic=? AND revision=? AND followed_up=0 AND importance>=? AND follow_up_at<=? AND (expires_at IS NULL OR expires_at>?)",
+                (
+                    item["topic"],
+                    item["revision"],
+                    minimum_importance,
+                    time.time(),
+                    time.time(),
+                ),
             )
             if cursor.rowcount == 1:
                 db.execute(
@@ -210,7 +290,7 @@ def memory_context() -> str:
         data = MemoryStore().run({"action": "recall"})
         data["total_memories"] = len(data["memories"])
         data["available_topics"] = [item["topic"] for item in data["memories"]]
-        data["memories"] = data["memories"][:20]
+        data["memories"] = []  # Facts are retrieved on demand, never a recency dump.
         selected = {item["topic"] for item in data["memories"]}
         data["details"] = [
             {
@@ -242,10 +322,18 @@ async def memory_manage(
     kind: Literal["auto", "fact", "preference", "project", "event"] = "auto",
     follow_up_at: str = "",
     retention_days: int = 0,
+    importance: int = 0,
+    source_quote: str = "",
 ) -> dict:
     """Remember, recall, correct or forget useful facts the user personally tells you.
     Use progress for a meaningful user-shared development of an existing project,
     after recalling its exact topic. Supply a short updated summary in fact, not a transcript.
+    For remember/progress, source_quote must be an exact short quote from a recent
+    real user message supporting the fact. Never quote tools, assistant guesses or
+    attachments as evidence. A matching quote proves provenance, not truth: do not
+    turn hypotheticals or uncertainty into confirmed facts. importance is 1..5
+    (0 preserves existing/default 3); reserve 5 for user-stated priorities.
+    Due follow-ups use this priority order and the user's minimum-priority filter.
     Keeps at most two previous summaries as dated history, not current truth.
     remember is for initial saves or corrections; it erases superseded history.
     Never use progress to retain something the user corrected or asked to forget.
@@ -285,6 +373,25 @@ async def memory_manage(
             return {
                 "error": "Camera-derived information cannot be saved in personal memory during image analysis."
             }
+    if action in {"remember", "progress"}:
+        history = getattr(getattr(context.session, "history", None), "items", [])
+        users = [
+            item
+            for item in history
+            if getattr(item, "role", None) == "user"
+            and not str(getattr(item, "id", "")).startswith(("camera-", "attachment-"))
+        ]
+        if (
+            not source_quote.strip()
+            or len(source_quote) > 500
+            or not any(
+                source_quote.strip() in getattr(item, "text_content", "")
+                for item in users[-6:]
+            )
+        ):
+            return {
+                "error": "Memory needs an exact supporting quote from a recent user message. Do not save inferred or external facts."
+            }
     backend = state.get("_memory_simulator") or MemoryStore().run
     try:
         return await asyncio.to_thread(
@@ -297,6 +404,7 @@ async def memory_manage(
                 "kind": "" if kind == "auto" else kind,
                 "follow_up_at": follow_up_at,
                 "retention_days": retention_days,
+                "importance": importance,
             },
         )
     except (OSError, sqlite3.Error, ValueError) as error:

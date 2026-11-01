@@ -51,6 +51,7 @@ def configure_simulation_tools(
             "spotify_control",
             "preferences_manage",
             "memory_manage",
+            "conversation_standby",
             "assistant_status",
             "notes_create",
             "notes_edit",
@@ -59,6 +60,7 @@ def configure_simulation_tools(
             "mail_send",
             "home_assistant_request",
             "home_assistant_inventory",
+            "home_assistant_room_context",
             "home_assistant_find",
             "home_assistant_get_state",
             "home_assistant_control",
@@ -71,7 +73,15 @@ def configure_simulation_tools(
         ),
         _blocked_write,
     )
-    if fixture == "camera_persistent_greetings":
+    if fixture == "conversation_ending":
+        session.userdata = {"_standby_count": 0}
+
+        async def standby():
+            session.userdata["_standby_count"] += 1
+
+        session.userdata["_standby_sender"] = standby
+        mocks.pop("conversation_standby")
+    elif fixture == "camera_persistent_greetings":
         mocks["camera_announcements"] = lambda request: (
             {
                 "enabled": True,
@@ -119,13 +129,20 @@ def configure_simulation_tools(
         fixture_camera(session)
         mocks.pop("camera_status")
         mocks.pop("camera_snapshot")
-    elif fixture in {"ha_environment", "ha_lights", "ha_ambiguous", "ha_timeout"}:
+    elif fixture in {
+        "ha_environment",
+        "ha_lights",
+        "ha_ambiguous",
+        "ha_timeout",
+        "ha_room_context",
+    }:
         from home_assistant_simulation import fixture_client
 
         client, api = fixture_client(fixture)
         session.userdata = {"_ha_client": client, "ha_api": api}
         for name in (
             "home_assistant_inventory",
+            "home_assistant_room_context",
             "home_assistant_find",
             "home_assistant_get_state",
             "home_assistant_control",
@@ -367,11 +384,22 @@ def _library_page(context, url: str) -> dict[str, str | int] | ToolError:
 
 async def check_simulation_state(ctx: SimulationContext) -> None:
     fixture = ctx.userdata().get("fixture")
+    if fixture == "conversation_ending":
+        count = ctx.job_context.primary_session.userdata.get("_standby_count", 0)
+        if count != ctx.userdata().get("expected_standby_count", 0):
+            ctx.fail(
+                "Conversational ending did not match the requested standby outcome."
+            )
+        return
     if fixture == "conversation_memory":
         backend = ctx.job_context.primary_session.userdata["_memory_simulator"]
-        data = backend({"action": "recall", "kind": "project"})
-        facts = " ".join(item["fact"] for item in data["memories"]).casefold()
         expected = ctx.userdata()["memory_expectations"]
+        data = backend(
+            {"action": "recall", "kind": expected.get("memory_kind", "project")}
+        )
+        facts = " ".join(item["fact"] for item in data["memories"]).casefold()
+        if len(data["memories"]) > expected.get("maximum_memories", 100):
+            ctx.fail("Repeated conversation created duplicate memories.")
         if not all(term in facts for term in expected["current_terms"]):
             ctx.fail("Expected the user-shared project summary to be saved accurately.")
         histories = [
@@ -408,7 +436,13 @@ async def check_simulation_state(ctx: SimulationContext) -> None:
         if fixture == "camera_image" and len(images) != 1:
             ctx.fail("Expected exactly one approved fictional snapshot.")
         return
-    if fixture in {"ha_environment", "ha_lights", "ha_ambiguous", "ha_timeout"}:
+    if fixture in {
+        "ha_environment",
+        "ha_lights",
+        "ha_ambiguous",
+        "ha_timeout",
+        "ha_room_context",
+    }:
         events = ctx.job_context.primary_session.userdata["ha_api"].events
         posts = [e for e in events if e[0] == "POST"]
         reads = [e[1] for e in events if e[0] == "GET"]
@@ -420,6 +454,31 @@ async def check_simulation_state(ctx: SimulationContext) -> None:
             ctx.fail(
                 "Expected exactly one resolved direct light dispatch, without Assist replay."
             )
+        if fixture == "ha_room_context":
+            snapshots = ctx.job_context.primary_session.userdata[
+                "ha_api"
+            ].room_snapshots
+            if (
+                posts
+                or not snapshots
+                or any(
+                    item.get("area", {}).get("id") != "bedroom" for item in snapshots
+                )
+            ):
+                ctx.fail(
+                    "Expected a read-only Bedroom snapshot without device actions."
+                )
+            if not any(
+                {
+                    "sensor.desk_temperature",
+                    "sensor.desk_humidity",
+                    "light.desk_led",
+                }.issubset({row["entity_id"] for row in item.get("observations", [])})
+                for item in snapshots
+            ):
+                ctx.fail(
+                    "Expected real fixture room readings, not just a conversational claim."
+                )
         if fixture == "ha_environment" and not {
             "/api/states/sensor.desk_temperature",
             "/api/states/sensor.desk_humidity",

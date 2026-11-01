@@ -14,6 +14,7 @@ from attachments import MAX_FILE_BYTES, MAX_FILES, MAX_SESSION_FILES, decode_att
 from camera_delivery import delivery_pending
 from camera_events import start_camera_events
 from companion_followups import FollowUps, follow_up_instructions
+from memory_lifecycle import validate_importance_threshold
 from personality import proactive_allowed
 from preferences_tools import read_preferences
 
@@ -30,6 +31,7 @@ class CheckInPolicy:
     quiet_start: int = 22
     quiet_end: int = 8
     timezone: str = "Europe/Oslo"
+    minimum_importance: int = 1
     lease_until: float = 0
     last_activity: float = 0
     awaiting_user: bool = False
@@ -53,11 +55,32 @@ class CheckInPolicy:
             ZoneInfo(payload.get("timezone", ""))
         except (ValueError, TypeError, ZoneInfoNotFoundError) as error:
             raise ValueError("Choose a valid timezone.") from error
+        payload = {
+            **payload,
+            "minimum_importance": payload.get(
+                "minimum_importance", self.minimum_importance
+            ),
+        }
+        validate_importance_threshold(payload["minimum_importance"])
         changed = any(
             getattr(self, key) != payload[key]
-            for key in ("enabled", "interval", "quiet_start", "quiet_end", "timezone")
+            for key in (
+                "enabled",
+                "interval",
+                "quiet_start",
+                "quiet_end",
+                "timezone",
+                "minimum_importance",
+            )
         )
-        for key in ("enabled", "interval", "quiet_start", "quiet_end", "timezone"):
+        for key in (
+            "enabled",
+            "interval",
+            "quiet_start",
+            "quiet_end",
+            "timezone",
+            "minimum_importance",
+        ):
             setattr(self, key, payload[key])
         self.lease_until = now + 90 if self.enabled else 0
         if changed:
@@ -312,12 +335,17 @@ class CompanionBridge:
                 {"error": "Only the connected user can change check-ins."}
             )
         try:
+            previous_minimum = self.policy.minimum_importance
             self.policy.configure(json.loads(invocation.payload), time.monotonic())
-            if not self.policy.enabled and self.speech is not None:
+            if self.speech is not None and (
+                not self.policy.enabled
+                or self.policy.minimum_importance > previous_minimum
+            ):
                 self.speech.interrupt()
             return json.dumps(
                 {
                     "enabled": self.policy.enabled,
+                    "minimum_importance": self.policy.minimum_importance,
                     "awaiting_user": self.policy.awaiting_user,
                     "idle_seconds": int(time.monotonic() - self.policy.last_activity),
                     "agent_state": self.session.agent_state,
@@ -385,14 +413,21 @@ class CompanionBridge:
             preferences = self.session.userdata.get("_personality_preferences", {})
             if not proactive_allowed(self.session):
                 continue
-            candidate = await self.followups.prepare(now, preferences)
+            candidate = await self.followups.prepare(
+                now, preferences, self.policy.minimum_importance
+            )
             if candidate is None:
                 continue  # Elapsed idle time alone is not a conversational reason.
             if not self.follow_up_ready():
                 continue
-            if not await self.followups.claim(candidate, preferences):
+            if not await self.followups.claim(
+                candidate, preferences, self.policy.minimum_importance
+            ):
                 continue
-            if not self.follow_up_ready():
+            if (
+                not self.follow_up_ready()
+                or candidate.get("importance", 3) < self.policy.minimum_importance
+            ):
                 continue  # A cancelled/uncertain claim is consumed, never replayed.
             # Consume before dispatch: uncertain audio must never repeat this follow-up.
             self.policy.awaiting_user = True

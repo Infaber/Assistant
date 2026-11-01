@@ -570,3 +570,11 @@ input[type="checkbox"] {
 .ai-mode-control summary {cursor:pointer; opacity:.6;}
 .ai-mode-control .mode-error {color:#e4a7ba;}
 @media(max-width:600px) {.ai-mode-control {bottom:86px;left:20px;width:calc(100vw - 40px);}}
+
+.voice-settings {display:grid;gap:10px;margin:16px 0;padding:14px 0;border-bottom:1px solid #ffffff18;font-size:12px;}
+.voice-settings label {display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.voice-settings select,.voice-settings button {max-width:100%;border:1px solid #ffffff28;border-radius:8px;background:#20202b;color:#eee;padding:7px;}
+.voice-settings small {opacity:.65;line-height:1.5;}
+.voice-settings pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;}
+.listening-cue {position:fixed;top:24%;left:50%;transform:translateX(-50%);font-size:12px;letter-spacing:.04em;color:#b9c6d8;pointer-events:none;}
+.listening-cue.expressive {padding:8px 16px;border:1px solid #b9c6d848;border-radius:20px;background:#10101870;}

@@ -86,3 +86,18 @@ def test_reinstall_preserves_phrase_and_never_downloads_when_verified(
     assert file.read_text() == "HEY ARIANA\n"
     setup.setup(tmp_path, "Ariana")
     assert file.read_text() == "Ariana\n"
+
+
+def test_new_setup_prefers_hey_ariana_and_phrase_metadata_matches_keywords(
+    tmp_path, monkeypatch
+):
+    from wake_config import configured_phrase
+
+    monkeypatch.setattr(setup, "installed", lambda directory: True)
+    monkeypatch.setattr(
+        setup, "prepare_keywords", lambda directory, phrase: phrase + "\n"
+    )
+    setup.setup(tmp_path)
+    assert configured_phrase(tmp_path) == "Hey Ariana"
+    setup.model_files(tmp_path)["keywords_file"].write_text("DIFFERENT\n")
+    assert configured_phrase(tmp_path) == "Custom phrase"

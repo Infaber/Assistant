@@ -53,8 +53,8 @@ Picovoice helper and its paid credentials are no longer used.
    ```
 
 3. Click Ariana's menu-bar icon and enable **Wake word**. Allow Microphone access
-   when asked. Say **“Ariana”**, pause briefly for activation, then speak.
-4. After about 15 seconds without speech/output, voice capture returns to muted
+   when asked. New setups prefer **“Hey Ariana”**; existing configured phrases are preserved. Wait for Listening, then speak.
+4. After 90 seconds without detected input, thinking or output, voice capture returns to muted
    waiting. Disable **Wake word** to stop local microphone recording completely.
 
 The installer downloads a pinned, checksum-verified ~17 MB archive once from the
@@ -75,7 +75,11 @@ without opening the microphone or running inference.
 
 ### Change the phrase or model location
 
-The default phrase is **Ariana**. To use **Hey Ariana**, quit the companion and run:
+New installations default to **Hey Ariana**. Existing phrases are not silently rewritten.
+In the Mac companion, Settings → Local wake word can configure **Hey Ariana** or
+**Ariana** and enable/disable detection. Changing the phrase runs the existing local
+setup script explicitly; if missing, it may download the pinned model. Configure
+only while the conversation is idle. For CLI setup, quit the companion and run:
 
 ```sh
 cd ariana
@@ -119,3 +123,31 @@ is armed locally, paused during conversation, or needs setup/microphone access.
 Accuracy and echo suppression still need testing with the user's microphone and
 voice; synthetic audio tests are not a substitute. Headphones help isolate echo
 when evaluating this. Wake mode does not identify or authenticate speakers.
+
+## Ariana 3 activation ownership and standby
+
+Wake activation is owned by a session-local generation token. Repeated activation
+while pending or active does not open another microphone. Cold starts join muted,
+wait for agent readiness (bounded to 90 seconds), then publish capture. Sleep,
+pause, provider error and reconnect cancel the token; a late callback cannot resume
+the canceled activation. A delayed macOS permission grant also cannot reverse a
+later disable request. No audio buffer was added: the helper → Swift → WebKit path
+currently carries events only. Immediate-command audio handoff remains unsupported.
+
+The 90-second inactivity window starts after capture becomes ready, not at keyword
+detection. Every 500ms it samples current activity, so a sustained unchanged input
+level or long model reply still extends the window. This is a practical activity
+heuristic, not a semantic detector of finished stories. Manually opened microphone
+sessions do not get this wake-owned timeout.
+
+Use **Stop speaking and return to standby** for a deterministic explicit control.
+The local microphone is muted first; an authenticated backend RPC interrupts output
+and clears staged approvals without replaying actions. A conversational standby
+tool also lets the model interpret a contextual goodnight; a casual thanks should
+not end a discussion. That semantic distinction still requires real-model evaluation.
+Standby keeps the room/context and may leave the opted-in local detector listening.
+Disable **Local wake detection** as well to stop that detector.
+
+New setup metadata ties the displayed phrase to the keyword file's hash. Legacy or
+manually edited keyword files show Custom phrase when the display name cannot be
+verified. Only phrase metadata is stored, never captured audio.

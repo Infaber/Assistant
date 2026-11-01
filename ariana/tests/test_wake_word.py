@@ -191,3 +191,20 @@ def test_model_check_never_constructs_microphone(monkeypatch, capsys):
     assert wake_word.main(check=True) == 0
     assert closed == [True]
     assert '"mode": "model_check"' in capsys.readouterr().out
+
+
+def test_arm_mute_queue_is_bounded_and_shutdown_supersedes_pending_intents():
+    import queue
+
+    from wake_word import latest_command
+
+    commands = queue.Queue(maxsize=1)
+    for index in range(1000):
+        latest_command(commands, bool(index % 2))
+    assert commands.qsize() == 1 and commands.get_nowait() is True
+    latest_command(commands, True)
+    latest_command(commands, False)
+    assert commands.get_nowait() is False
+    latest_command(commands, True)
+    latest_command(commands, None)
+    assert commands.get_nowait() is None

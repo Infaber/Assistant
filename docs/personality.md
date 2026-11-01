@@ -96,3 +96,50 @@ wins over a queued follow-up; consumed uncertain claims are never replayed.
 for isolated evaluations or another local profile. Normal installs keep their
 existing location. Style preferences load on reconnect and apply through the
 existing live-update path. No new setup or dependency is required.
+
+## Follow-up priority controls
+
+Settings → Check-ins now has a **Minimum follow-up priority** filter (1–5). The
+default includes all due saved follow-ups; choose 4+ or 5 to limit interruptions.
+The native companion saves this choice alongside its existing opt-in and quiet
+hours. Ordinary browser settings remain session-scoped. Priority never enables
+check-ins by itself and cannot bypass quiet hours, inactivity, lease, cooldown,
+initiative-off or the unanswered check-in guard.
+
+Each saved event/project uses its memory `importance` (default 3). Ask Ariana to
+set it when saving or updating the memory, for example “Treat the exam follow-up
+as priority five.” Among eligible due records, higher priority wins, then the oldest
+due date. Lower-priority records remain pending rather than being consumed or
+promoted automatically. The transactional claim rechecks the current threshold;
+raising the filter during dispatch prevents a newly ineligible follow-up from
+starting. Raising it while proactive speech is playing interrupts that speech.
+Old frontends that omit the field retain the backend's existing threshold.
+
+## Ariana 3 voice controls and listening cues
+
+Settings now exposes a shortlist of actual Gemini voice presets, the existing
+bounded conversation preferences, and delivery preference restrained/natural/lively.
+Delivery is model guidance, not a pitch, speed, laughter or emotion-intensity knob.
+Voice/style selections from this panel are saved atomically for a fresh connection;
+opening the panel never interrupts speech or starts a preview. Explicit saved
+presets take precedence over the environment fallback. Local mode retains af_heart.
+
+A supported Gemini turn-end silence override can be selected as provider default,
+500, 800 or 1200ms. The default sends no override. This tunes automatic endpointing;
+it does not classify short acknowledgments and can trade response latency for pause
+tolerance. The model still owns Normal-mode interruption decisions.
+
+Comparison slots A/B store only settings locally. Load a slot, save, reconnect
+explicitly, then play the fixed sample. Samples are native model replies in the
+current session, can appear in history and are interruptible, with tools removed
+and a cooldown. Wording/performance may vary; this is a repeatable listening
+workflow, not an objective voice-quality benchmark or isolated recording booth.
+
+No reliable mid-speech audio backchannel contract was found for the current
+Gemini/LiveKit pipeline. **Listening cues (visual)** therefore offers Off/Subtle/
+Expressive, default Subtle, as the safe alternative. It renders only with active
+input while output is inactive. It plays no clips, calls no tools and creates no
+model turn. There is no separate laughter or acknowledgment audio provider.
+Native amused delivery/chuckles, hesitations and self-corrections remain model
+behavior influenced by guidance; none is claimed as guaranteed or acoustically
+validated here.

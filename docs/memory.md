@@ -6,11 +6,16 @@ the same topic and limited to 100. File permissions are 0600. Forget deletes the
 selected topic; pause/resume affects saving. Preferences remain in their existing
 local file. No vector database, embeddings or cloud memory service was added.
 
-At startup Ariana gets 20 recent facts and a topic index. `memory_manage` can query
-all facts with `query`. Retrieval weights direct topic matches and distinctive
+At startup Ariana gets a topic index and preferences, with no unsolicited fact dump.
+`memory_manage` can query all facts with `query`. Local inference also retrieves up
+to six relevant facts for each model request, including tool continuations, so
+corrections and deletions are read from current storage. Gemini Live retains
+model-driven retrieval through the same tool; its native turn detection does not
+run the pipeline pre-response hook. Retrieval weights direct topic matches and distinctive
 terms above a small engineering synonym map (ESP32/Home Assistant/LED/sensors/
 automation). Unmatched queries return no facts, rather than unrelated recent facts.
-The method is deterministic and runs over at most 100 rows. Ordinary topic recall
+The method is deterministic and runs over at most 100 rows. Importance (1–5,
+default 3) modestly weights matching memories; it never promotes unrelated facts. Ordinary topic recall
 still works without relevance ranking; unavailable/corrupt storage does not prevent
 conversation and must not lead to invented memory.
 
@@ -82,3 +87,31 @@ the latest fact separately from dated previous summaries. Old milestones are not
 current truth. Startup still contains only current facts and the topic index;
 history is retrieved when needed, keeping the realtime prompt small. No embeddings,
 cloud memory, periodic summarization job or extra model call was introduced.
+
+## Ariana 3 continuity changes
+
+The tool requires `source_quote` for remember/progress: an exact quote from one of
+the six most recent real user turns. Camera events, attachment turns and assistant
+messages cannot supply that evidence. The quote is checked in session memory and
+is not stored in SQLite. This proves provenance, not entailment or truth: the
+model still must reject hypothetical, uncertain and sensitive claims. Direct
+`MemoryStore.run` is an internal trusted API, not an exposed endpoint.
+
+`importance=0` preserves the existing score (or default 3); 1–5 sets it. Existing
+databases migrate transactionally on access. Identical normalized facts under
+different topics return `duplicate_topic` rather than silently merging records.
+An unchanged remember with omitted lifecycle overrides preserves its revision,
+expiry, project history and consumed/pending follow-up. Repeating the same kind
+or adjusting importance alone also preserves that lifecycle. Actual corrections
+still clear superseded history and replace the previous follow-up. Explicit
+retention/follow-up overrides remain lifecycle edits.
+
+Recovery and idle transport refresh now read the current topic index rather than
+a startup closure. Already-spoken conversation and existing tool history are not
+erased by deleting a stored memory; forgetting deletes durable storage.
+
+Importance also determines due follow-up order. `follow_up(minimum_importance=1)`
+selects only due, unexpired, unconsumed records meeting the threshold, ordered by
+importance descending and due time ascending. Claiming rechecks importance inside
+the existing transaction. Filtering out a low-priority follow-up does not consume
+it, change its due date or bypass the cross-topic cooldown.

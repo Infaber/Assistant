@@ -81,7 +81,7 @@ def test_concurrent_writes_preserve_facts(tmp_path):
 def test_bounded_memory_does_not_silently_evict(tmp_path):
     store = MemoryStore(tmp_path / "m.db")
     for i in range(100):
-        store.run({"action": "remember", "topic": f"topic {i}", "fact": "Fact"})
+        store.run({"action": "remember", "topic": f"topic {i}", "fact": f"Fact {i}"})
     assert "error" in store.run({"action": "remember", "topic": "new", "fact": "New"})
     assert store.run({"action": "remember", "topic": "topic 0", "fact": "Corrected"})[
         "success"
@@ -110,7 +110,7 @@ def test_startup_loads_bounded_context_from_disk(tmp_path, monkeypatch):
 
     data = json.loads(memory_context().split("\n")[-1])
     assert data["total_memories"] == 25
-    assert len(data["memories"]) == 20
+    assert data["memories"] == []
     assert data["preferences"] == {"display_name": "QA"}
 
 

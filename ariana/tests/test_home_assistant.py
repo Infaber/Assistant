@@ -592,6 +592,7 @@ async def test_all_simulations_block_ha_unless_fixture_explicit(monkeypatch):
         mocks = install.call_args.args[1]
         assert "home_assistant_request" in mocks
         assert ("home_assistant_control" in mocks) == (fixture is None)
+        assert ("home_assistant_room_context" in mocks) == (fixture is None)
         assert ("_ha_client" in session.userdata) == (fixture == "ha_lights")
 
 

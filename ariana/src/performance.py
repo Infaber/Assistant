@@ -78,6 +78,34 @@ def install_performance(session):
             if name in LATENCIES:
                 performance.record(name, value)
 
+    timing = {"user_end": None, "overlap": None, "speaking": False}
+
+    @session.on("user_state_changed")
+    def user_state(event):
+        now = performance.clock()
+        if event.new_state == "speaking":
+            timing["user_end"] = None
+            if timing["speaking"]:
+                timing["overlap"] = now
+        elif event.old_state == "speaking":
+            timing["user_end"] = now
+
+    @session.on("agent_state_changed")
+    def agent_state(event):
+        now = performance.clock()
+        speaking = event.new_state == "speaking"
+        if speaking and not timing["speaking"] and timing["user_end"] is not None:
+            performance.record(
+                "sdk_user_end_to_speaking_state", now - timing["user_end"]
+            )
+            timing["user_end"] = None
+        if not speaking and timing["speaking"] and timing["overlap"] is not None:
+            performance.record(
+                "sdk_overlap_to_speaking_state_stop", now - timing["overlap"]
+            )
+            timing["overlap"] = None
+        timing["speaking"] = speaking
+
     pending = {}
 
     @session.on("tool_execution_updated")
@@ -99,5 +127,6 @@ def install_performance(session):
     @session.on("close")
     def closed(event):
         pending.clear()
+        timing.update(user_end=None, overlap=None, speaking=False)
 
     return performance

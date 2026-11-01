@@ -27,7 +27,7 @@ export function useAIMode(room: Room, selected: AIMode, onRequest: (mode:AIMode)
     read();
     return ()=>{room.off(RoomEvent.ParticipantAttributesChanged,read);room.off(RoomEvent.ParticipantConnected,read);room.off(RoomEvent.Disconnected,offline);};
   },[room]);
-  async function change(mode:AIMode) {
+  async function change(mode:AIMode, carryContext=false) {
     callbacks.current.onRequest(mode);
     setError('');
     if (room.state !== ConnectionState.Connected) return;
@@ -40,7 +40,7 @@ export function useAIMode(room: Room, selected: AIMode, onRequest: (mode:AIMode)
       // Do not feed speech to the old engine while Local is loading.
       await room.localParticipant.setMicrophoneEnabled(false);
       if (mode==='local' && room.localParticipant.isScreenShareEnabled) await room.localParticipant.setScreenShareEnabled(false);
-      const raw=await room.localParticipant.performRpc({destinationIdentity:agent.identity,method:'ariana.mode',payload:JSON.stringify({action:'switch',mode}),responseTimeout:90_000});
+      const raw=await room.localParticipant.performRpc({destinationIdentity:agent.identity,method:'ariana.mode',payload:JSON.stringify({action:'switch',mode,carry_context:carryContext}),responseTimeout:90_000});
       const next=parseModeStatus(JSON.parse(raw));
       if (!next || next.error || next.state!=='ready' || next.mode!==mode) throw new Error(next?.error || 'Backend has not confirmed the mode change. Check the displayed active engine before speaking.');
       setStatus(next);

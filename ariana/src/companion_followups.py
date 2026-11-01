@@ -11,19 +11,21 @@ class FollowUps:
         self.store = store or MemoryStore()
         self.next_probe = 0.0
 
-    async def prepare(self, now, preferences):
+    async def prepare(self, now, preferences, minimum_importance=1):
         if preferences.get("initiative", "low") == "off" or now < self.next_probe:
             return None
         self.next_probe = now + 60
         try:
-            return await asyncio.to_thread(self.store.follow_up)
+            return await asyncio.to_thread(self.store.follow_up, minimum_importance)
         except Exception:
             return None  # Missing/corrupt memory is a reason to stay quiet.
 
-    async def claim(self, item, preferences):
+    async def claim(self, item, preferences, minimum_importance=1):
         gap = 3600 if preferences.get("initiative", "low") == "low" else 1800
         try:
-            return await asyncio.to_thread(self.store.claim_follow_up, item, gap)
+            return await asyncio.to_thread(
+                self.store.claim_follow_up, item, gap, minimum_importance
+            )
         except Exception:
             return False
 

@@ -37,3 +37,15 @@ struct OutputSuppression {
     }
     func blocks(now: TimeInterval) -> Bool { active || now < quietUntil }
 }
+
+// A delayed permission grant must never reverse a later disable or quit intent.
+struct WakeConsent {
+    private(set) var requested = false
+    private var generation = 0
+    mutating func request(enabled: Bool) -> Int {
+        generation += 1
+        requested = enabled
+        return generation
+    }
+    func isCurrent(_ token: Int) -> Bool { token == generation && requested }
+}

@@ -36,6 +36,7 @@ class ModeBridge:
         self.ready = None
         self.prepare = prepare
         self.error = ""
+        self.context_transferred = False
         self.tasks = set()
         self.registered = False
 
@@ -52,7 +53,7 @@ class ModeBridge:
             "state": self.state,
             "model": model,
             "error": self.error,
-            "context_transferred": False,
+            "context_transferred": self.context_transferred,
         }
 
     async def publish(self):
@@ -72,7 +73,9 @@ class ModeBridge:
         if self.ready is not None and not self.ready.done():
             self.ready.set_result(True)
 
-    async def switch(self, target):
+    async def switch(self, target, *, carry_context=False):
+        if type(carry_context) is not bool:
+            return {"error": "Conversation transfer must be explicitly on or off."}
         if target not in MODES:
             return {"error": "Choose Normal or Unrestricted Mode."}
         if self.lock.locked():
@@ -107,8 +110,16 @@ class ModeBridge:
                     else:
                         await self.prepare()
                 # No model change until all target dependencies are prepared.
-                agent = self.make_agent(target, self.entered)
                 await self.session.interrupt()
+                if carry_context:
+                    from conversation_context import transfer_context
+
+                    chat = transfer_context(self.session.current_agent.chat_ctx)
+                    agent = self.make_agent(target, self.entered, chat)
+                    transferred = bool(chat.items)
+                else:
+                    agent = self.make_agent(target, self.entered)
+                    transferred = False
                 if companion:
                     companion.uploads.clear()
                 for key in (
@@ -119,6 +130,7 @@ class ModeBridge:
                 ):
                     self.session.userdata.pop(key, None)
                 self.ready = asyncio.get_running_loop().create_future()
+                self.context_transferred = transferred
                 self.session.update_agent(agent)
                 await asyncio.wait_for(asyncio.shield(self.ready), 30)
                 return self.status()
@@ -152,7 +164,12 @@ class ModeBridge:
                 return json.dumps(self.status())
             if request.get("action") != "switch":
                 raise ValueError
-            return json.dumps(await self.switch(request.get("mode")))
+            return json.dumps(
+                await self.switch(
+                    request.get("mode"),
+                    carry_context=request.get("carry_context", False),
+                )
+            )
         except (ValueError, TypeError, AttributeError):
             return json.dumps({"error": "Invalid mode request."})
 
