@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import './workspace.css';
 import { assistantName } from '../lib/persona';
 
 export const metadata: Metadata = {

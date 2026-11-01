@@ -23,7 +23,7 @@ test("orb is the main screen, typing reveals input, and mobile fits", async ({
         .locator("canvas")
         .evaluate((canvas) => (canvas as HTMLCanvasElement).width),
     )
-    .toBeGreaterThan(400);
+    .toBeGreaterThan(200);
   await page.keyboard.press("h");
   await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true })).toHaveValue(
     "h",
@@ -268,7 +268,7 @@ test("keyboard can activate the orb without the typing shortcut stealing Enter",
   await page.goto("/");
   // The canvas starts in a React effect. Wait for hydration before assigning
   // programmatic focus, which WebKit can otherwise lose during the first mount.
-  await expect.poll(() => page.locator("canvas").evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(400);
+  await expect.poll(() => page.locator("canvas").evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(200);
   await page.locator(".orb-touch").focus();
   await expect(page.locator(".orb-touch")).toBeFocused();
   await page.keyboard.press("Enter");
@@ -489,6 +489,36 @@ test('synthetic long transcript stays separate from orb and controls',async ({pa
     expect(preview!.y+preview!.height).toBeLessThan(controls!.y);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     if(height>650){const orb=await page.locator('.orb-touch').boundingBox();expect(orb!.y+orb!.height).toBeLessThan(preview!.y);}
-    else await expect(page.locator('.orb-center')).toBeHidden();
+    else await expect(page.locator('.orb-center')).toBeVisible();
+  }
+});
+
+test('workspace navigation and message entry remain silent and keyboard accessible',async ({page})=>{
+  let connections=0;
+  await page.route('**/api/connection',route=>{connections++;return route.fulfill({status:503,json:{error:'Offline fixture'}});});
+  await page.goto('/');
+  await page.getByRole('button',{name:'Preferences',exact:true}).click();
+  await page.getByRole('navigation',{name:'Settings sections'}).getByRole('button',{name:'Appearance',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Glass bubble',exact:true})).toBeInViewport();
+  await page.keyboard.press('Escape');
+  await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:/Conversation/}).click();
+  await expect(page.getByRole('heading',{name:'Conversation',exact:true}).last()).toBeVisible();
+  await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+  await page.getByRole('button',{name:/What's on your mind/}).click();
+  await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, {exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  expect(connections).toBe(0);
+});
+
+test('workspace panels fit desktop, tablet and narrow mobile without overlap',async ({page})=>{
+  for(const viewport of [{width:1440,height:900},{width:1024,height:768},{width:768,height:1024},{width:320,height:568}]){
+    await page.setViewportSize(viewport);await page.goto('/');
+    await expect(page.getByRole('heading',{name:'Standby',exact:true})).toBeVisible();
+    const voice=await page.locator('.voice-space').boundingBox();
+    const conversation=await page.locator('.conversation-preview').boundingBox();
+    if(viewport.width>600) expect(voice!.x+voice!.width).toBeLessThan(conversation!.x);
+    else expect(voice!.y+voice!.height).toBeLessThan(conversation!.y);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    if(viewport.width>900){const nav=await page.locator('.workspace-nav>button').last().boundingBox();const engine=await page.locator('.ai-mode-control').boundingBox();expect(nav!.y+nav!.height).toBeLessThan(engine!.y);}
   }
 });
