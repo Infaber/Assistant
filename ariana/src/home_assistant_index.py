@@ -5,6 +5,7 @@ import unicodedata
 from difflib import SequenceMatcher
 
 DOMAINS = {
+    "automation",
     "sensor",
     "binary_sensor",
     "light",

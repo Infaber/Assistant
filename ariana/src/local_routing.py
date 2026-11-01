@@ -10,6 +10,7 @@ from local_config import local_model, local_url
 
 CORE = {
     "memory_manage",
+    "conversation_standby",
     "preferences_manage",
     "task_status",
     "ai_engine_status",
@@ -19,6 +20,7 @@ GROUPS = {
     "home": {
         "home_assistant_find",
         "home_assistant_inventory",
+        "home_assistant_room_context",
         "home_assistant_get_state",
         "home_assistant_control",
         "home_assistant_alias",

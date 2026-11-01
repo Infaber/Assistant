@@ -1,6 +1,7 @@
 """In-memory Home Assistant used only by explicit simulation/test fixtures."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 from home_assistant import HomeAssistant
 from home_assistant_api import HAError, HomeAssistantAPI
@@ -23,6 +24,7 @@ class FixtureAPI(HomeAssistantAPI):
         super().__init__("http://simulation.invalid", "fixture-only-token")
         self.fixture = fixture
         self.events = []
+        self.room_snapshots = []
         self.rows = {
             "sensor.desk_temperature": {
                 "entity_id": "sensor.desk_temperature",
@@ -86,6 +88,9 @@ class FixtureAPI(HomeAssistantAPI):
                 for eid, row in self.rows.items()
             ],
         }
+        if fixture == "ha_room_context":
+            for row in self.rows.values():
+                row["last_reported"] = datetime.now(timezone.utc).isoformat()
         if fixture == "ha_ambiguous":
             self.rows["sensor.window_temperature"] = {
                 "entity_id": "sensor.window_temperature",
@@ -137,6 +142,14 @@ class FixtureAPI(HomeAssistantAPI):
         raise AssertionError("Unexpected simulated HA request")
 
 
+class RoomFixtureAssistant(HomeAssistant):
+    async def room_context(self, area, include_camera=False):
+        result = await super().room_context(area, include_camera)
+        self.api.room_snapshots.append(deepcopy(result))
+        return result
+
+
 def fixture_client(fixture="ha_environment"):
     api = FixtureAPI(fixture)
-    return HomeAssistant(api, InMemoryAliases()), api
+    assistant = RoomFixtureAssistant if fixture == "ha_room_context" else HomeAssistant
+    return assistant(api, InMemoryAliases()), api

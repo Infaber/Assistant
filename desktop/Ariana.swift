@@ -17,6 +17,11 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     private var statusEntry: NSMenuItem!
     private var loginEntry: NSMenuItem!
     private var wakeEntry: NSMenuItem!
+    private var wakePhrase = "Custom phrase"
+    private var wakeSetup: Process?
+    private var wakeConfiguring = false
+    private var wakeConsent = WakeConsent()
+    private var wakePermissionPending = false
     private var wakeProcess: Process?
     private var wakeInput: Pipe?
     private var wakeOutput: Pipe?
@@ -224,14 +229,19 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             refreshLogin()
         }
     }
-    @objc private func toggleWake() {
-        if wakeGate.enabled {
+    @objc private func toggleWake() { setWakeEnabled(!wakeGate.enabled) }
+    private func setWakeEnabled(_ enabled: Bool) {
+        let token = wakeConsent.request(enabled: enabled)
+        if !enabled {
+            wakePermissionPending = false
             wakeGate.enabled = false; UserDefaults.standard.set(false, forKey: "wakeWordEnabled")
             wakeFailure = ""; syncWake(); return
         }
+        wakePermissionPending = true; refreshWakeLabel()
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self = self, !self.quitting, self.wakeConsent.isCurrent(token) else { return }
+                self.wakePermissionPending = false
                 self.wakeGate.enabled = granted
                 UserDefaults.standard.set(granted, forKey: "wakeWordEnabled")
                 self.wakeFailure = granted ? "" : "microphone permission denied"
@@ -239,12 +249,37 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             }
         }
     }
+    private func publishWakeStatus() {
+        let status: [String:Any] = ["enabled":wakeGate.enabled,"ready":wakeReady && wakeListening && wakeGate.armed,"phrase":wakePhrase,"configuring":wakeConfiguring,"permission_pending":wakePermissionPending,"can_configure":!wakeConfiguring && !wakeGate.busy && !wakeGate.sessionListening && !wakeGate.outputActive,"error":wakeFailure]
+        guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data:data,encoding:.utf8) else { return }
+        web?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('ariana:wake-status',{detail:" + json + "}))", completionHandler:nil)
+    }
+    private func configureWakePhrase(_ phrase: String) {
+        guard ["Hey Ariana","Ariana"].contains(phrase), !wakeConfiguring, !wakeGate.busy, !wakeGate.sessionListening, !wakeGate.outputActive else { return }
+        wakeConfiguring = true; wakeFailure = ""; stopWake(); refreshWakeLabel()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath:python)
+        process.arguments = [root.appendingPathComponent("ariana/scripts/setup_wake_word.py").path,"--phrase",phrase]
+        process.standardOutput = Pipe(); process.standardError = Pipe(); wakeSetup = process
+        process.terminationHandler = { [weak self] exited in
+            DispatchQueue.main.async {
+                guard let self = self, self.wakeSetup === exited else { return }
+                self.wakeSetup = nil; self.wakeConfiguring = false
+                if exited.terminationStatus == 0 { self.wakePhrase = phrase }
+                else { self.wakeFailure = "phrase setup failed; check installed wake dependencies" }
+                self.syncWake()
+            }
+        }
+        do { try process.run() } catch { wakeSetup=nil; wakeConfiguring=false; wakeFailure="wake setup unavailable"; refreshWakeLabel() }
+    }
     private func refreshWakeLabel() {
         wakeEntry?.state = wakeGate.enabled ? .on : .off
         let label = !wakeFailure.isEmpty ? wakeFailure : !wakeGate.enabled ? "off" : !wakeReady ? "starting local detector" : wakeGate.armed ? (wakeListening ? "armed locally" : "starting local microphone") : "paused during conversation"
-        wakeEntry?.title = "Wake word · " + label
+        wakeEntry?.title = "Wake word · " + (wakeConfiguring ? "configuring local phrase" : label)
+        publishWakeStatus()
     }
     private func syncWake() {
+        if wakeConfiguring { refreshWakeLabel(); return }
         if quitting { stopWake(); return }
         wakeGate.outputActive = outputSuppression.blocks(now: ProcessInfo.processInfo.systemUptime)
         refreshWakeLabel()
@@ -287,7 +322,7 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         while let end = wakeBuffer.firstIndex(of: "\n") {
             let line = String(wakeBuffer[..<end]); wakeBuffer.removeSubrange(...end)
             guard let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            if message["event"] as? String == "ready" { wakeReady = true; syncWake() }
+            if message["event"] as? String == "ready" { if let phrase = message["phrase"] as? String, phrase.count <= 60 { wakePhrase = phrase }; wakeReady = true; syncWake() }
             else if message["event"] as? String == "listening" { wakeListening = message["enabled"] as? Bool == true; refreshWakeLabel() }
             else if message["event"] as? String == "wake", wakeGate.detect(now: ProcessInfo.processInfo.systemUptime) {
                 notify("ariana:wake-word"); syncWake()
@@ -295,7 +330,14 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, let data = message.body as? [String: Any], data["type"] as? String == "state",
+        guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == "127.0.0.1", message.frameInfo.securityOrigin.port == port, let data = message.body as? [String: Any] else { return }
+        if data["type"] as? String == "wake-status" { publishWakeStatus(); return }
+        if data["type"] as? String == "wake-settings" {
+            if let enabled = data["enabled"] as? Bool { setWakeEnabled(enabled) }
+            if let phrase = data["phrase"] as? String { configureWakePhrase(phrase) }
+            return
+        }
+        guard data["type"] as? String == "state",
               let state = data["state"] as? String, ["idle","listening","thinking","speaking","connecting","offline","recovering","paused"].contains(state) else { return }
         lastStateAt = Date(); lastFrontendState = state; setStatus(wakeGate.sleeping ? "sleeping" : !networkOnline ? "offline" : state)
         wakeGate.sessionListening = data["microphone"] as? Bool == true
@@ -309,7 +351,7 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
-        quitting = true; notify("ariana:pause"); network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
+        quitting = true; _ = wakeConsent.request(enabled: false); wakeSetup?.terminate(); wakeSetup=nil; notify("ariana:pause"); network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
         agent?.stop(); frontend?.stop()
         let deadline = Date().addingTimeInterval(10)
         func finish() {

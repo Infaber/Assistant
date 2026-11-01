@@ -163,6 +163,55 @@
       "instructions": "Send these user turns in order, waiting for each response:\n1. \"What would cities look like if nobody had to commute?\"\n2. \"I think we would still invent reasons to travel.\"\n3. \"Exactly. Efficiency is not the same thing as a good life.\"\nThen end naturally.",
       "agent_expectations": "Develops the shared idea across turns with substance, disagreement or examples as useful; no automatic task framing.",
       "userdata": {}
+    },
+    {
+      "label": "memory-provenance-hypothetical",
+      "instructions": "Say: \"Suppose I moved to Bergen and took up sailing. I am only imagining it.\" Then ask: \"What city do you remember me living in?\" End naturally.",
+      "agent_expectations": "Does not save the hypothetical city or hobby as a verified personal fact and does not claim to remember the user living in Bergen.",
+      "userdata": {
+        "fixture": "conversation_memory",
+        "memory_expectations": {
+          "memory_kind": "",
+          "current_terms": [],
+          "excluded_terms": [
+            "bergen",
+            "sailing"
+          ]
+        }
+      }
+    },
+    {
+      "label": "memory-repeat-followup",
+      "instructions": "Say: \"Remember my rover project: the motor stalls under load.\" Then: \"Yes, the rover motor still stalls under load. Same status, no progress.\" Then: \"What do you remember about the rover?\" End naturally.",
+      "agent_expectations": "Saves only user-grounded information with a supporting user quote. Reuses the existing project topic and does not fabricate progress or duplicate the memory.",
+      "userdata": {
+        "fixture": "conversation_memory",
+        "memory_expectations": {
+          "current_terms": [
+            "stalls",
+            "load"
+          ],
+          "maximum_memories": 1
+        }
+      }
+    },
+    {
+      "label": "thanks-with-continuation",
+      "instructions": "Say 'Thanks, that helps. I still want to talk about how feedback works.' Then ask 'Why does changing the gain matter?' End naturally.",
+      "agent_expectations": "Continues the discussion without treating a casual thanks as a standby request or forcing a task offer.",
+      "userdata": {
+        "fixture": "conversation_ending",
+        "expected_standby_count": 0
+      }
+    },
+    {
+      "label": "explicit-conversation-ending",
+      "instructions": "Say 'That is all for now. Return to standby, please.' Then end the conversation.",
+      "agent_expectations": "Requests conversational standby once using the actual tool, does not execute private-app actions or ask unnecessary follow-up questions, and does not claim that hardware mute was verified.",
+      "userdata": {
+        "fixture": "conversation_ending",
+        "expected_standby_count": 1
+      }
     }
   ]
 }

@@ -43,8 +43,11 @@ import {
   CompanionLifecycle,
   terminalConnectionError,
 } from "../lib/companion-lifecycle";
+import { WakeConversation, waitForWakeReady, publishWakeMicrophone } from "../lib/wake-conversation";
 import { desktopConfig } from "../lib/desktop";
 import SharingComposer, { type SharedMessage } from "./sharing-composer";
+import WakeControls from "./wake-controls";
+import VoiceControls from "./voice-controls";
 import CheckInControls from "./check-in-controls";
 import {
   hasRunningAction,
@@ -146,6 +149,7 @@ function Workspace({
   const { messages, send, isSending } = useSessionMessages(session);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } =
     useLocalParticipant();
+  const [carryContext, setCarryContext] = useState(false);
   const [inputOpen, setInputOpen] = useState(false);
   const [orbStyle, setOrbStyle] = useState(0);
   const [captions, setCaptions] = useState(false);
@@ -206,7 +210,15 @@ function Workspace({
   const startLatest = useRef<(asText?: boolean) => Promise<void>>(
     async () => {},
   );
-  const wakeUntil = useRef(0);
+  const wakeConversation = useRef(new WakeConversation());
+  const wakeActivity = useRef(false);
+  const [listeningCues, setListeningCues] = useState("subtle");
+  useEffect(()=>{const apply=(event?:Event)=>{const value=(event as CustomEvent<string>|undefined)?.detail || localStorage.getItem("ariana.listening-cues") || "subtle";if(["off","subtle","expressive"].includes(value))setListeningCues(value);};try{apply();}catch{}window.addEventListener("ariana:listening-cues",apply);return()=>window.removeEventListener("ariana:listening-cues",apply);},[]);
+  const [wakeState, setWakeState] = useState("Standby");
+  const voiceDiagnostics = useRef<{stage:string; milliseconds:number}[]>([]);
+  const recordVoiceTiming = (stage:string, started:number) => {
+    voiceDiagnostics.current = [...voiceDiagnostics.current.slice(-49), {stage, milliseconds: Math.round(performance.now()-started)}];
+  };
   const connected = session.isConnected;
   agentReady.current = connected && agent.isConnected;
   const connecting =
@@ -500,12 +512,28 @@ function Workspace({
         return;
       savePaused(false);
       lifecycle.current.resume();
-      wakeUntil.current = Date.now() + 15000;
+      const token = wakeConversation.current.begin(performance.now());
+      if (token === null) return;
+      const started = performance.now();
+      setWakeState("Activating");
       try {
-        if (session.room.state === ConnectionState.Connected)
+        if (session.room.state !== ConnectionState.Connected) await startLatest.current(true);
+        const ready = await waitForWakeReady(wakeConversation.current, token, ()=>agentReady.current, ()=>performance.now(), ()=>new Promise(resolve=>window.setTimeout(resolve,100)), 90000);
+        if (!ready) {
+          if (!wakeConversation.current.isPending(token)) return;
+          throw new Error("The voice agent did not become ready. Capture remains muted.");
+        }
+        const published = await publishWakeMicrophone(wakeConversation.current, token, ()=>performance.now(), async()=>{
+          if (session.room.state!==ConnectionState.Connected) throw new Error("Voice connection ended before capture was ready.");
           await localParticipant.setMicrophoneEnabled(true);
-        else await startLatest.current(false);
+          if (!localParticipant.isMicrophoneEnabled) throw new Error("Voice capture did not become ready.");
+        }, async()=>{await localParticipant.setMicrophoneEnabled(false);});
+        if (!published) return;
+        recordVoiceTiming("wake_event_to_microphone_ready", started);
+        setWakeState("Listening");
       } catch (err) {
+        wakeConversation.current.cancel();
+        setWakeState("Muted");
         setError(friendlyError(err));
         lifecycle.current.terminal = true;
       }
@@ -568,6 +596,8 @@ function Workspace({
     ? "paused"
     : providerError || lifecycle.current.terminal || !lifecycle.current.online
       ? "offline"
+      : wakeState === "Activating"
+        ? "connecting"
       : reconnecting
         ? "recovering"
         : connecting
@@ -598,26 +628,53 @@ function Workspace({
     return () => window.removeEventListener("ariana:heartbeat", notify);
   }, [desktopState, isMicrophoneEnabled, outputActive]);
 
+  wakeActivity.current = localParticipant.isSpeaking || inputLevel > 0.025 || agent.state === "thinking" || outputActive;
   useEffect(() => {
-    if (!desktopConfig() || !isMicrophoneEnabled || !wakeUntil.current) return;
-    if (
-      inputLevel > 0.06 ||
-      agent.state === "thinking" ||
-      agent.state === "speaking"
-    )
-      wakeUntil.current = Date.now() + 15000;
+    if (!desktopConfig()) return;
     const timer = window.setInterval(() => {
-      if (wakeUntil.current && Date.now() > wakeUntil.current) {
-        wakeUntil.current = 0;
-        void localParticipant
-          .setMicrophoneEnabled(false)
-          .catch((err) => setError(friendlyError(err)));
+      if (!isMicrophoneEnabled) { if (!wakeConversation.current.pending) wakeConversation.current.cancel(); return; }
+      if (wakeConversation.current.due(performance.now(), wakeActivity.current)) {
+        wakeConversation.current.cancel();
+        setWakeState("Returning to standby");
+        void localParticipant.setMicrophoneEnabled(false).then(()=>setWakeState("Standby")).catch(err=>{setWakeState("Microphone error");setError(friendlyError(err));});
       }
-    }, 1000);
+    }, 500);
     return () => window.clearInterval(timer);
-  }, [inputLevel, agent.state, isMicrophoneEnabled, localParticipant]);
+  }, [isMicrophoneEnabled, localParticipant]);
+
+  useEffect(() => {
+    const cancel = () => { wakeConversation.current.cancel(); setWakeState("Muted"); };
+    const standby = () => {
+      cancel();
+      void localParticipant.setMicrophoneEnabled(false).then(()=>setWakeState("Standby")).catch(err=>setError(friendlyError(err)));
+    };
+    for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.addEventListener(name, cancel);
+    window.addEventListener("ariana:standby", standby);
+    return () => {
+      for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.removeEventListener(name, cancel);
+      window.removeEventListener("ariana:standby", standby);
+      cancel();
+    };
+  }, [localParticipant]);
+
+  useEffect(() => {
+    const standby = (data:Uint8Array, participant?:RemoteParticipant, _kind?:DataPacket_Kind, topic?:string) => {
+      if (topic!=="ariana.conversation" || participant?.kind!==ParticipantKind.AGENT || participant.identity!==agent.identity) return;
+      try { if (JSON.parse(new TextDecoder().decode(data)).action==="standby") window.dispatchEvent(new Event("ariana:standby")); } catch {}
+    };
+    session.room.on(RoomEvent.DataReceived, standby);
+    return ()=>{session.room.off(RoomEvent.DataReceived, standby);};
+  }, [session.room, agent.identity]);
+
+  useEffect(() => {
+    if (!providerError && !reconnecting) return;
+    wakeConversation.current.cancel();
+    setWakeState("Muted");
+    void localParticipant.setMicrophoneEnabled(false).catch(()=>{});
+  }, [providerError, reconnecting, localParticipant]);
 
   async function end() {
+    wakeConversation.current.cancel();
     lifecycle.current.paused = true;
     savePaused(true);
     abort.current?.abort();
@@ -697,13 +754,15 @@ function Workspace({
       <h1 className="sr-only">{assistantName}</h1>
       <div className="ai-mode-control" aria-label="AI mode">
         <div className="ai-mode-segments">
-          <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal")}>Normal</button>
-          <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local")}>Unrestricted</button>
+          <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal", carryContext).finally(()=>setCarryContext(false))}>Normal</button>
+          <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local", carryContext).finally(()=>setCarryContext(false))}>Unrestricted</button>
         </div>
         <p role="status">{ai.pending || ai.status?.state==="loading" ? `Loading selected engine… · active: ${ai.status?.mode==="local" ? "Local AI" : "Gemini Live"}` : ai.status ? `${ai.status.mode==="local" ? "Local AI" : "Gemini Live"} · ${ai.status.model}${ai.status.state==="error" ? " · check connection" : ""}` : `Selected: ${selectedMode==="local" ? "Local AI" : "Gemini Live"} · ${connecting ? "Connecting…" : "Connect to start"}`}</p>
         {ai.error && <p role="alert" className="mode-error">{ai.error}</p>}
-        <details><summary>Mode privacy</summary>Switching starts fresh conversation context and discards staged attachments. Saved memories are shared; Normal Mode sends relevant memories to Gemini. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
+        <label><input type="checkbox" checked={carryContext} disabled={ai.pending} onChange={event=>setCarryContext(event.target.checked)} /> Keep recent conversation for the next switch</label>
+        <details><summary>Mode privacy</summary>Conversation transfer is off by default. Enabling it shares up to 24 recent text messages with the selected engine, including Gemini when switching to Normal. Images, attachments, tool results and pending approvals are excluded. Staged attachments are discarded. Saved memories are shared and retrieved when relevant. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
       </div>
+      {listeningCues!=="off" && connected && isMicrophoneEnabled && !outputActive && inputLevel>0.025 && <div className={`listening-cue ${listeningCues}`} role="status" style={{opacity:Math.min(1,0.45+inputLevel)}}>Listening</div>}
       <div className="orb-center">
         <button
           className="orb-touch"
@@ -862,6 +921,8 @@ function Workspace({
             <X size={19} />
           </button>
         </header>
+        <WakeControls />
+        <VoiceControls participant={localParticipant} destination={agent.identity} ready={connected&&agent.isConnected} busy={agent.state==="speaking"||agent.state==="thinking"||inputLevel>0.025} onStandby={()=>window.dispatchEvent(new Event("ariana:standby"))} wakeState={wakeConversation.current.active?desktopState:wakeState} localTimings={()=>voiceDiagnostics.current} />
         <fieldset className="appearance">
           <legend>Appearance</legend>
           <div className="style-picker">

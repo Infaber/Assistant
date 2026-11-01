@@ -109,17 +109,30 @@ def setup(directory, phrase=None):
                 os.replace(file, directory / file.name)
     keywords = model_files(directory)["keywords_file"]
     if phrase is not None or not keywords.is_file():
-        text = prepare_keywords(directory, phrase or "Ariana")
+        text = prepare_keywords(directory, phrase or "Hey Ariana")
         temporary = keywords.with_suffix(".tmp")
         temporary.write_text(text)
         os.replace(temporary, keywords)
+        metadata = directory / "wake-phrase.json"
+        staging = metadata.with_suffix(".tmp")
+        staging.write_text(
+            json.dumps(
+                {
+                    "phrase": (phrase or "Hey Ariana").strip(),
+                    "keywords_sha256": hashlib.sha256(
+                        keywords.read_bytes()
+                    ).hexdigest(),
+                }
+            )
+        )
+        os.replace(staging, metadata)
     print("Free local wake model ready. Enable Wake word in Ariana's menu.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--phrase", help="Wake phrase (default on first install: Ariana)"
+        "--phrase", help="Wake phrase (default on first install: Hey Ariana)"
     )
     args = parser.parse_args()
     from dotenv import load_dotenv

@@ -108,3 +108,41 @@ async def test_sdk_tool_timing_handles_parallel_end_and_cancel_without_payload(c
         {"stage": "tool_execution", "milliseconds": 3000},
     ]
     assert "private" not in caplog.text and "secret" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_real_sdk_state_timings_measure_events_without_claiming_acoustic_latency():
+    from livekit.agents.voice.events import (
+        AgentStateChangedEvent,
+        UserStateChangedEvent,
+    )
+
+    ticks = iter([1, 2, 2.4, 3, 3.08])
+    session = AgentSession(
+        userdata={"_performance": Performance(clock=lambda: next(ticks))}
+    )
+    metrics = install_performance(session)
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="listening", new_state="speaking"),
+    )
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="speaking", new_state="listening"),
+    )
+    session.emit(
+        "agent_state_changed",
+        AgentStateChangedEvent(old_state="thinking", new_state="speaking"),
+    )
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="listening", new_state="speaking"),
+    )
+    session.emit(
+        "agent_state_changed",
+        AgentStateChangedEvent(old_state="speaking", new_state="listening"),
+    )
+    summary = metrics.summary()
+    assert summary["sdk_user_end_to_speaking_state"]["mean_ms"] == 400
+    assert summary["sdk_overlap_to_speaking_state_stop"]["mean_ms"] == 80
+    assert "first_audible_audio" not in summary

@@ -133,8 +133,8 @@ completed receipts remain. Pending approvals, camera consent and Mac snapshots a
 cleared. Staged attachments are discarded on success. No previous request is replayed.
 If the result is uncertain, the microphone stays off until the user checks state.
 
-Each engine starts **fresh model conversation context**. The local transcript is not
-copied into Gemini. **Saved memories/preferences are shared** and can be loaded into
+Each engine starts **fresh model conversation context by default**. The local
+transcript is not copied into Gemini unless the one-switch transfer opt-in is on. **Saved memories/preferences are shared** and can be loaded into
 Gemini when the user explicitly selects Normal. Do not save a local discussion as
 memory if you do not want that shared-memory behavior. Pause/forget still apply.
 
@@ -181,3 +181,22 @@ See [local mode evaluation](local-ai-evaluation.md) for actual tests, model answ
 synthetic audio and room/RPC checks. A human microphone/speaker test and a sustained
 20-minute conversation remain necessary. No actual personal Apple-app data or real
 home devices are required by CI. Local models/assets are not downloaded in CI.
+
+## Optional conversation continuity
+
+Beside the engine selector, **Keep recent conversation for the next switch** opts in once, then
+resets. It is off initially and never stored as a lasting preference. Switching
+to Normal with it enabled sends those text messages to Gemini. Transfer carries
+at most 24 messages / 12,000 characters, excluding camera/attachment messages,
+multimodal content, tools and instructions. Interrupted assistant turns retain
+their interruption marker. Transfer does not regenerate a reply or replay a tool.
+Staged approvals and camera consent are cleared; action receipts remain. Without
+the opt-in, the existing fresh-context behavior remains.
+
+Local inference keeps its existing 24-item tool-safe tail and adds up to three
+matching older user excerpts (500 characters each), plus six relevant saved facts.
+This ephemeral retrieval makes returning to an earlier topic possible without
+feeding the whole transcript to the local model. Excerpts are historical evidence
+and may be superseded by recent corrections. There is no automatic transcript
+storage or model-written emotional profile. Retrieval remains lexical, so
+paraphrases with no shared vocabulary can still miss.

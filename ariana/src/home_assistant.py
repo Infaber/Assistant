@@ -175,6 +175,11 @@ class HomeAssistant:
             self.pending.pop(entity.get("registry_id") or entity["entity_id"], None)
         return result
 
+    async def room_context(self, area, include_camera=False):
+        from room_context import snapshot
+
+        return await snapshot(self, area, include_camera)
+
     async def inventory(self, force=False):
         index = await self.refresh(force)
         # Metadata overview, never the raw state database.

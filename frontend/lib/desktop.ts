@@ -6,7 +6,7 @@ export type DesktopConfig = {
     state: string;
     microphone: boolean;
     output: boolean;
-  }) => void;
+  } | {type:"wake-status"} | {type:"wake-settings";enabled?:boolean;phrase?:"Hey Ariana"|"Ariana"}) => void;
 };
 declare global {
   interface Window {

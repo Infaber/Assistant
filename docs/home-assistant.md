@@ -131,3 +131,38 @@ service, sensor disambiguation and honest timeout reporting without replay. CI i
 available simulation quota. No test contacted the user's real HA instance.
 
 Camera entities are now discoverable alongside sensors. For Frigate counts, cloud-image consent and optional event notifications, see [camera awareness](camera-awareness.md).
+
+## Room context overview
+
+`home_assistant_room_context(area, include_camera=false, camera="")` is a new
+read-only overview for an explicitly chosen area. For example: “Give me a quick
+Bedroom overview: temperature, light levels, motion and device states.” It resolves
+an exact area name, native area alias or saved area alias, then reads current
+registries and states. Ambiguity or missing area metadata never expands the scope
+to the whole home. It does not subscribe, alter devices or enable proactive speech.
+
+Results include at most 18 observations, three per category, distributed across
+categories before adding extra sensors. Temperature, humidity, illuminance,
+occupancy, motion, lights, switches, fans, climate, covers and area-assigned
+automations are supported. Results state how many eligible observations were
+omitted; arbitrary attributes, automation actions and credentials are not exported.
+
+This uses the documented [Home Assistant state timestamps](https://www.home-assistant.io/docs/configuration/state_object/):
+`last_reported`, falling back to `last_updated`. As a conservative Ariana policy,
+occupancy/motion readings must be at most 90 seconds old; other readings at most
+10 minutes old. Missing/future timestamps, unknown/unavailable states and
+assumed/restored states have `state=null` and `verified=false`. An unchanged device
+may therefore be reported as unverified until its integration reports again.
+Collection is sequential, not an atomic physical-world observation. Motion off
+never proves absence, and an occupancy signal never identifies a person.
+
+Area-assigned automations expose only a valid `last_triggered` time within 24 hours,
+marked historical; it is not proof that their actions succeeded. Automations with
+no explicit area assignment are excluded, rather than inferred from their names.
+
+Frigate sources are excluded by default. If the user explicitly requests camera
+counts in the overview, `include_camera=true` selects one discovered total person
+source in that same area and invokes the existing camera read path. The camera
+feature still must be enabled, and its camera/sensor identity and freshness checks
+still apply. Multiple sources require disambiguation. No image or recognized name
+is retrieved, no physical occupancy is guaranteed and identity remains unknown.

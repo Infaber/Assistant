@@ -177,5 +177,31 @@
       "Exactly. Efficiency is not the same thing as a good life."
     ],
     "expectation": "Develops the shared idea across turns with substance, disagreement or examples as useful; no automatic task framing."
+  },
+  {
+    "id": "thanks-continue",
+    "turns": [
+      "That helps, thanks. I am still curious about the other approach though.",
+      "Why would you choose it over the first one?"
+    ],
+    "expectation": "Treats thanks as part of an ongoing discussion, preserves both alternatives and does not conclude or offer a service menu."
+  },
+  {
+    "id": "unfinished-thought",
+    "turns": [
+      "Maybe the interface should feel calmer. I am not sure how to describe it yet.",
+      "Less movement. Not a new feature, just less visual noise.",
+      "Exactly. That is what I meant."
+    ],
+    "expectation": "Uses the ongoing interface context, accepts the clarification without launching an implementation task and does not interrogate a short acknowledgment."
+  },
+  {
+    "id": "short-interruption-repair",
+    "turns": [
+      "Explain how a feedback controller works.",
+      "Wait. Just explain the sensor part.",
+      "No, I mean how it notices a change."
+    ],
+    "expectation": "Follows each replacement request concisely without finishing the old explanation or treating short speech as meaningless. This text test does not prove audio cancellation latency."
   }
 ]

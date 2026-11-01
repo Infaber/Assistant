@@ -8,7 +8,7 @@ import time
 from contextlib import suppress
 from pathlib import Path
 
-from wake_config import model_directory, model_files
+from wake_config import configured_phrase, model_directory, model_files
 
 
 class WakeDetector:
@@ -133,6 +133,17 @@ def output(message):
     print(json.dumps(message), flush=True)
 
 
+def latest_command(commands, value):
+    """Only the newest arm/mute intent matters; shutdown replaces pending state."""
+    while True:
+        try:
+            commands.put_nowait(value)
+            return
+        except queue.Full:
+            with suppress(queue.Empty):
+                commands.get_nowait()
+
+
 def main(check=False):
     from dotenv import load_dotenv
 
@@ -152,7 +163,7 @@ def main(check=False):
                 {"event": "listening", "enabled": enabled}
             ),
         )
-        commands = queue.Queue()
+        commands = queue.Queue(maxsize=1)
 
         def receive():
             for line in sys.stdin:
@@ -161,13 +172,13 @@ def main(check=False):
                     if isinstance(message, dict) and isinstance(
                         message.get("enabled"), bool
                     ):
-                        commands.put(message["enabled"])
+                        latest_command(commands, message["enabled"])
                 except (ValueError, TypeError):
                     pass
-            commands.put(None)
+            latest_command(commands, None)
 
         threading.Thread(target=receive, daemon=True).start()
-        output({"event": "ready"})
+        output({"event": "ready", "phrase": configured_phrase(model_directory())})
         while True:
             try:
                 # No recorder reads or polling spin while disabled.

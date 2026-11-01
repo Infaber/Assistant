@@ -48,6 +48,11 @@ def schema(db):
     db.execute(
         "CREATE TABLE IF NOT EXISTS memory_details (topic TEXT PRIMARY KEY REFERENCES facts(topic) ON DELETE CASCADE, kind TEXT NOT NULL, expires_at REAL, follow_up_at REAL, followed_up INTEGER NOT NULL DEFAULT 0, revision TEXT NOT NULL)"
     )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(memory_details)")}
+    if "importance" not in columns:
+        db.execute(
+            "ALTER TABLE memory_details ADD COLUMN importance INTEGER NOT NULL DEFAULT 3"
+        )
     db.execute(
         "CREATE TABLE IF NOT EXISTS project_history (id INTEGER PRIMARY KEY, topic TEXT NOT NULL REFERENCES facts(topic) ON DELETE CASCADE, summary TEXT NOT NULL, recorded_at REAL NOT NULL)"
     )
@@ -76,7 +81,7 @@ def details(db, rows):
     metadata = {
         row[0]: row[1:]
         for row in db.execute(
-            "SELECT topic,kind,expires_at,follow_up_at,followed_up,revision FROM memory_details"
+            "SELECT topic,kind,expires_at,follow_up_at,followed_up,revision,importance FROM memory_details"
         )
     }
     return [
@@ -86,8 +91,15 @@ def details(db, rows):
             previous_summaries=history(db, topic),
             **dict(
                 zip(
-                    ("kind", "expires_at", "follow_up_at", "followed_up", "revision"),
-                    metadata.get(topic, ("fact", None, None, 0, "legacy")),
+                    (
+                        "kind",
+                        "expires_at",
+                        "follow_up_at",
+                        "followed_up",
+                        "revision",
+                        "importance",
+                    ),
+                    metadata.get(topic, ("fact", None, None, 0, "legacy", 3)),
                     strict=True,
                 )
             ),
@@ -127,3 +139,8 @@ def history(db, topic):
             (topic,),
         )
     ]
+
+
+def validate_importance_threshold(value):
+    if type(value) is not int or not 1 <= value <= 5:
+        raise ValueError("Minimum importance must be a whole number from 1 to 5.")

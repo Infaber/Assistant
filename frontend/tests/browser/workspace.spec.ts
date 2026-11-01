@@ -349,3 +349,68 @@ test('local selection remains selected, not active, when backend startup fails',
   await page.getByRole('button',{name:'Normal',exact:true}).click();
   await expect(page.getByRole('button',{name:'Normal',exact:true})).toHaveAttribute('aria-pressed','true');
 });
+
+test("conversation transfer requires a fresh opt-in for each engine switch", async ({ page }) => {
+  await page.goto("/");
+  const transfer = page.getByLabel("Keep recent conversation for the next switch");
+  await expect(transfer).not.toBeChecked();
+  await transfer.check();
+  await page.getByRole("button", { name: "Unrestricted", exact: true }).click();
+  await expect(transfer).not.toBeChecked();
+  await page.reload();
+  await expect(transfer).not.toBeChecked();
+});
+
+test("native proactive priority filter persists without enabling extra actions", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.arianaDesktop = { desktop: true, accessCode: "fixture-code" };
+    localStorage.setItem("ariana.desktop.check-ins", JSON.stringify({enabled: true, interval: 15, quietStart: 22, quietEnd: 8, minimumImportance: 4}));
+  });
+  await page.route("**/api/connection", route => route.fulfill({status: 503, json: {error: "Fixture offline"}}));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const priority = page.getByLabel("Minimum follow-up priority");
+  await expect(priority).toHaveValue("4");
+  await priority.selectOption("5");
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("ariana.desktop.check-ins") || "{}").minimumImportance)).toBe(5);
+  await expect(page.getByRole("switch", { name: /^Let (?:Ariana|Jarvis) start conversations$/ })).toBeDisabled();
+});
+
+test('voice settings open silently and visual listening cues can be disabled', async ({page}) => {
+  let connections=0;
+  await page.route('**/api/connection',route=>{connections++;return route.fulfill({status:503,json:{error:'Fixture offline'}});});
+  await page.addInitScript(()=>{(window as unknown as {plays:number}).plays=0;HTMLMediaElement.prototype.play=function(){(window as unknown as {plays:number}).plays++;return Promise.resolve();};});
+  await page.goto('/');
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await expect(page.getByLabel('Gemini voice',{exact:true})).toBeDisabled();
+  await page.getByText('Compare configurations',{exact:true}).click();
+  await expect(page.getByRole('button',{name:'Play current voice sample'})).toBeDisabled();
+  await page.getByLabel('Listening cue level').selectOption('off');
+  expect(await page.evaluate(()=>localStorage.getItem('ariana.listening-cues'))).toBe('off');
+  expect(await page.evaluate(()=>(window as unknown as {plays:number}).plays)).toBe(0);
+  expect(connections).toBe(0);
+  await page.reload();
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await expect(page.getByLabel('Listening cue level')).toHaveValue('off');
+});
+
+test('native wake settings send bounded explicit configuration requests', async ({page}) => {
+  await page.addInitScript(()=>{
+    const calls:unknown[]=[];
+    (window as unknown as {wakeCalls:unknown[]}).wakeCalls=calls;
+    window.arianaDesktop={desktop:true,accessCode:'fixture-only',postMessage:(message)=>{
+      calls.push(message);
+      if(message.type==='wake-settings' && message.enabled!==undefined)window.dispatchEvent(new CustomEvent('ariana:wake-status',{detail:{enabled:message.enabled,ready:message.enabled,phrase:'Ariana',configuring:false,error:''}}));
+      if(message.type==='wake-status')window.dispatchEvent(new CustomEvent('ariana:wake-status',{detail:{enabled:false,ready:false,phrase:'Hey Ariana',configuring:false,error:''}}));
+    }};
+  });
+  await page.route('**/api/connection',route=>route.fulfill({status:503,json:{error:'Fixture offline'}}));
+  await page.goto('/');
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  await expect(page.getByLabel('Wake phrase',{exact:true})).toHaveValue('Hey Ariana');
+  await page.getByLabel('Wake phrase',{exact:true}).selectOption('Ariana');
+  await page.getByRole('button',{name:'Configure local phrase'}).click();
+  expect(await page.evaluate(()=>(window as unknown as {wakeCalls:unknown[]}).wakeCalls)).toContainEqual({type:'wake-settings',phrase:'Ariana'});
+  await page.getByLabel('Local wake detection',{exact:true}).check();
+  expect(await page.evaluate(()=>(window as unknown as {wakeCalls:unknown[]}).wakeCalls)).toContainEqual({type:'wake-settings',enabled:true});
+});
