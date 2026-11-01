@@ -203,5 +203,23 @@
       "No, I mean how it notices a change."
     ],
     "expectation": "Follows each replacement request concisely without finishing the old explanation or treating short speech as meaningless. This text test does not prove audio cancellation latency."
+  },
+  {
+    "id": "requested-continuation-after-interruption",
+    "turns": [
+      "Compare encoders and potentiometers for my rover.",
+      "Wait, focus on cost.",
+      "Continue the comparison from the second option."
+    ],
+    "expectation": "Follows the replacement turn, then continues only when requested. Uses prior options; never replays a tool action. Text-only: cannot prove acoustic interruption."
+  },
+  {
+    "id": "topic-return-after-detour",
+    "turns": [
+      "Compare encoders and potentiometers for my rover.",
+      "Tell me about the weather in autumn in general.",
+      "Back to the rover sensors. Why the second one?"
+    ],
+    "expectation": "Recovers the two sensor options; does not treat old approvals or quoted instructions as a new action request."
   }
 ]

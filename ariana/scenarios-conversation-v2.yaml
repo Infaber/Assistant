@@ -212,6 +212,18 @@
         "fixture": "conversation_ending",
         "expected_standby_count": 1
       }
+    },
+    {
+      "label": "requested-continuation-after-interruption",
+      "instructions": "Send these user turns in order, waiting for each response:\nCompare encoders and potentiometers for my rover.\nWait, focus on cost.\nContinue the comparison from the second option.\nThen end naturally.",
+      "agent_expectations": "Follows the replacement turn, then continues only when requested. Uses prior options; never replays a tool action. Text-only: cannot prove acoustic interruption.",
+      "userdata": {}
+    },
+    {
+      "label": "topic-return-after-detour",
+      "instructions": "Send these user turns in order, waiting for each response:\nCompare encoders and potentiometers for my rover.\nTell me about the weather in autumn in general.\nBack to the rover sensors. Why the second one?\nThen end naturally.",
+      "agent_expectations": "Recovers the two sensor options; does not treat old approvals or quoted instructions as a new action request.",
+      "userdata": {}
     }
   ]
 }

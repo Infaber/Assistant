@@ -94,7 +94,19 @@ class Assistant(Agent):
         mode="normal",
         on_ready=None,
     ) -> None:
-        self.voice_name = configured_voice() if mode == "normal" else "af_heart"
+        from personality import effective_style
+        from preferences_tools import read_preferences
+
+        preferences = read_preferences()
+        self.voice_name = (
+            configured_voice(preferences) if mode == "normal" else "af_heart"
+        )
+        self.voice_settings = {
+            "local_speed": preferences.get("local_speed", "1.0"),
+            **effective_style(preferences),
+            "google_voice": configured_voice(preferences),
+            "turn_end_pause": preferences.get("turn_end_pause", "provider"),
+        }
         self.ai_mode = mode
         self.on_ready = on_ready
         if mode == "local":
@@ -103,7 +115,7 @@ class Assistant(Agent):
             options = local_options()
         else:
             options = {
-                "llm": realtime_model(_google_api_key(), model_name),
+                "llm": realtime_model(_google_api_key(), model_name, preferences),
                 "turn_handling": TurnHandlingOptions(turn_detection="realtime_llm"),
             }
         tools = [

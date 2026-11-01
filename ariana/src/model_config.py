@@ -13,17 +13,19 @@ def configured_model() -> str:
     return os.getenv("ARIANA_GOOGLE_MODEL", "").strip() or DEFAULT_MODEL
 
 
-def configured_voice():
+def configured_voice(preferences=None):
     from preferences_tools import read_preferences
 
+    if preferences is None:
+        preferences = read_preferences()
     return (
-        read_preferences().get("google_voice")
+        preferences.get("google_voice")
         or os.getenv("ARIANA_GOOGLE_VOICE", "").strip()
         or "Sulafat"
     )
 
 
-def realtime_model(api_key: str, model_name: str = ""):
+def realtime_model(api_key: str, model_name: str = "", preferences=None):
     model = model_name.strip() or configured_model()
     if model.removeprefix("models/") == EXTENDED_MODEL:
         raise ValueError(
@@ -33,7 +35,9 @@ def realtime_model(api_key: str, model_name: str = ""):
     options = {}
     from preferences_tools import read_preferences
 
-    pause = read_preferences().get("turn_end_pause", "provider")
+    if preferences is None:
+        preferences = read_preferences()
+    pause = preferences.get("turn_end_pause", "provider")
     if pause != "provider":
         options["realtime_input_config"] = types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
@@ -46,7 +50,7 @@ def realtime_model(api_key: str, model_name: str = ""):
         options["tool_behavior"] = types.Behavior.BLOCKING
     return google.realtime.RealtimeModel(
         model=model,
-        voice=configured_voice(),
+        voice=configured_voice(preferences),
         language="en-US",
         api_key=api_key,
         **options,

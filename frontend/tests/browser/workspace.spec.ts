@@ -414,3 +414,33 @@ test('native wake settings send bounded explicit configuration requests', async 
   await page.getByLabel('Local wake detection',{exact:true}).check();
   expect(await page.evaluate(()=>(window as unknown as {wakeCalls:unknown[]}).wakeCalls)).toContainEqual({type:'wake-settings',enabled:true});
 });
+
+
+test("conversation state and microphone distinction are visible without connecting", async ({page}) => {
+  let connections = 0;
+  await page.route("**/api/connection", route => { connections++; return route.fulfill({status:503,json:{error:"offline fixture"}}); });
+  await page.goto("/");
+  await expect(page.getByRole("heading", {name:"Standby",exact:true})).toBeVisible();
+  await expect(page.getByText("Conversation microphone is off.", {exact:false})).toBeVisible();
+  await expect(page.getByRole("region", {name:"Recent conversation"})).toBeVisible();
+  await page.getByRole("button", {name:"Settings",exact:true}).click();
+  await expect(page.getByRole("heading", {name:"Wake & microphone"})).toBeVisible();
+  await expect(page.getByLabel("Local speaking rate")).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", {name:"Settings",exact:true})).toBeFocused();
+  expect(connections).toBe(0);
+});
+
+test("mobile companion remains within viewport with reduced motion", async ({page}) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.goto("/");
+  await expect(page.getByRole("heading",{name:"Standby",exact:true})).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button",{name:"Settings",exact:true}).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+});

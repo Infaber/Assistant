@@ -135,3 +135,60 @@ test("uncertain microphone publication and late canceled capture fail closed", a
   );
   assert.equal(enableCalls, 0);
 });
+
+
+test("a canceled publication retains ownership until cleanup finishes", async () => {
+  const { publishWakeMicrophone } = await import("../lib/wake-conversation");
+  const state = new WakeConversation();
+  let finish!: () => void;
+  let muted = false;
+  const token = state.begin(0)!;
+  const publication = publishWakeMicrophone(state, token, () => 1,
+    () => new Promise<void>(resolve => { finish = resolve; }),
+    async () => { muted = true; });
+  state.cancel();
+  assert.equal(state.begin(2), null);
+  finish();
+  assert.equal(await publication, false);
+  assert.equal(muted, true);
+  assert.notEqual(state.begin(3), null);
+});
+
+for (const reason of ["consent revoked", "sleep", "reconnect", "standby"]) {
+  test(`${reason} cancels delayed wake readiness without publishing`, async () => {
+    const {waitForWakeReady} = await import("../lib/wake-conversation");
+    const state = new WakeConversation();
+    const token = state.begin(0)!;
+    let now = 0;
+    const ready = await waitForWakeReady(state, token, () => now > 0, () => now,
+      async () => { now += 100; state.cancel(); }, 1000);
+    assert.equal(ready, false);
+    assert.equal(state.active, false);
+  });
+}
+
+
+test("a rejected canceled publication does not turn intentional cancellation into an error", async () => {
+  const {publishWakeMicrophone} = await import("../lib/wake-conversation");
+  const state = new WakeConversation();
+  const token = state.begin(0)!;
+  let reject!: (error: Error) => void;
+  let muted = false;
+  const result = publishWakeMicrophone(state, token, () => 1,
+    () => new Promise<void>((_, fail) => {reject = fail;}), async () => {muted = true;});
+  state.cancel();
+  reject(new Error("track ended after sleep"));
+  assert.equal(await result, false);
+  assert.equal(muted, true);
+  assert.notEqual(state.begin(2), null);
+});
+
+test("microphone cleanup failures remain visible and do not leak ownership", async () => {
+  const {publishWakeMicrophone} = await import("../lib/wake-conversation");
+  const state = new WakeConversation();
+  const token = state.begin(0)!;
+  await assert.rejects(publishWakeMicrophone(state, token, () => 1,
+    async () => {state.cancel();}, async () => {throw new Error("mute failed");}), /mute failed/);
+  assert.equal(state.active, false);
+  assert.notEqual(state.begin(2), null);
+});

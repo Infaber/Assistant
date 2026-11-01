@@ -97,7 +97,9 @@ def local_options():
             ),
         ),
         "vad": silero.VAD.load(max_buffered_speech=60),
-        "turn_handling": TurnHandlingOptions(turn_detection="vad"),
+        "turn_handling": TurnHandlingOptions(
+            turn_detection="vad", interruption={"resume_false_interruption": False}
+        ),
     }
 
 

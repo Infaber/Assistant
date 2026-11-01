@@ -42,13 +42,19 @@ def transfer_context(chat, *, max_messages=24, max_chars=12000):
 
 
 def retrieval_query(chat):
-    users = [item for item in conversational_messages(chat) if item.role == "user"]
+    conversation = conversational_messages(chat)
+    users = [item for item in conversation if item.role == "user"]
     if not users:
         return ""
     query = users[-1].text_content[:500]
     # Short replies need their preceding topic; no emotional/intent classification.
-    if len(query.split()) <= 2 and len(users) > 1:
-        query = (query + " " + users[-2].text_content)[:500]
+    if len(query.split()) <= 3:
+        current = conversation.index(users[-1])
+        recent = conversation[max(0, current - 6) : current]
+        # Newest context first, so a long earlier turn cannot crowd out the referent.
+        query = " ".join(
+            [query, *(item.text_content[:160] for item in reversed(recent))]
+        )[:1000]
     return query
 
 
@@ -63,7 +69,23 @@ def local_context(chat, memories):
     ]
     lookup = {item.id: item.text_content[:500] for item in older}
     anchors = relevant_memories(list(lookup.items()), retrieval_query(chat), limit=3)
+    messages = chat.items
+    conversational_ids = {item.id for item in conversational_messages(chat)}
+    adjacent = []
+    for anchor in anchors:
+        for index, item in enumerate(messages[:-1]):
+            if (
+                item.id == anchor["topic"]
+                and messages[index + 1].id in conversational_ids
+                and messages[index + 1].role == "assistant"
+            ):
+                reply = messages[index + 1]
+                adjacent.append(
+                    {"text": reply.text_content[:700], "interrupted": reply.interrupted}
+                )
+                break
     data = {
+        "older_assistant_excerpts": adjacent,
         "older_user_excerpts": [item["fact"] for item in anchors],
         "relevant_memories": memories,
     }

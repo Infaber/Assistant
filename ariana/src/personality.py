@@ -42,7 +42,7 @@ No possessiveness, romantic pressure, exclusivity or dependency.
 """
 
 
-def style_block(preferences):
+def effective_style(preferences):
     values = {
         "delivery": "natural",
         "warmth": "balanced",
@@ -63,6 +63,11 @@ def style_block(preferences):
             if key in STYLE_CHOICES and value in STYLE_CHOICES[key]
         }
     )
+    return values
+
+
+def style_block(preferences):
+    values = effective_style(preferences)
     return (
         STYLE_START
         + "\n"

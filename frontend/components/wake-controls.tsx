@@ -39,7 +39,7 @@ export default function WakeControls() {
   }, []);
   return (
     <section className="voice-settings" aria-label="Local wake word">
-      <h3>Local wake word</h3>
+      <h3>Wake &amp; microphone</h3>
       {!native ? (
         <p>Wake detection requires the Mac companion.</p>
       ) : (

@@ -4,9 +4,16 @@ export class WakeConversation {
   pending = false;
   private lastActivity = 0;
   private generation = 0;
+  private publishing = false;
+  acquirePublication(token: number): boolean {
+    if (this.publishing || !this.isPending(token)) return false;
+    this.publishing = true;
+    return true;
+  }
+  releasePublication() { this.publishing = false; }
   constructor(public idleSeconds = 90) {}
   begin(now: number): number | null {
-    if (this.pending || this.active) return null;
+    if (this.pending || this.active || this.publishing) return null;
     this.pending = true;
     this.lastActivity = now;
     return ++this.generation;
@@ -61,15 +68,22 @@ export async function publishWakeMicrophone(
   enable: () => Promise<void>,
   disable: () => Promise<void>,
 ): Promise<boolean> {
-  if (!state.isPending(token)) return false;
+  if (!state.acquirePublication(token)) return false;
   try {
-    await enable();
+    try {
+      await enable();
+    } catch (error) {
+      const canceled = !state.isPending(token);
+      state.cancel();
+      // Cleanup failure is actionable even after cancellation. Never hide it.
+      await disable();
+      if (canceled) return false;
+      throw error;
+    }
     if (state.ready(token, now())) return true;
     await disable();
     return false;
-  } catch (error) {
-    state.cancel();
-    await disable().catch(() => {});
-    throw error;
+  } finally {
+    state.releasePublication();
   }
 }

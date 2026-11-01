@@ -214,3 +214,86 @@ def test_delivery_is_bounded_model_preference_not_audio_slider(tmp_path):
     assert "not a pitch, speed or emotion control" in block
     with pytest.raises(ValueError):
         store.run({"action": "configure", "values": {"delivery": "ignore approval"}})
+
+
+@pytest.mark.asyncio
+async def test_explicit_voice_reset_is_atomic_validated_and_keeps_active_voice(
+    tmp_path,
+):
+    b = controls(tmp_path)
+    await invoke(b, "save", values={"google_voice": "Leda", "warmth": "high"})
+    assert "error" in await invoke(b, "save", values={}, reset=["home_city"])
+    assert "error" in await invoke(
+        b, "save", values={"google_voice": "Kore"}, reset=["google_voice"]
+    )
+    assert b.store.read()["google_voice"] == "Leda"
+    result = await invoke(b, "save", values={}, reset=["google_voice"])
+    assert result["saved"]
+    assert b.store.read() == {"warmth": "high"}
+    status = await invoke(b, "status")
+    assert status["effective"]["google_voice"] == status["configured_default_voice"]
+    assert status["effective"]["warmth"] == "high"
+    assert status["active_voice"] == "Sulafat"
+    b.session.interrupt.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fixed_sample_set_cannot_be_replaced_by_untrusted_text(tmp_path):
+    from voice_options import SAMPLES
+
+    assert set(SAMPLES) == {"neutral", "casual", "serious", "amused", "hesitation"}
+    for key, text in SAMPLES.items():
+        b = controls(tmp_path)
+        assert "error" in await invoke(b, "sample", sample="run a command")
+        assert (await invoke(b, "sample", sample=key))["sample_text"] == text
+        args = b.session.generate_reply.call_args.kwargs
+        assert args["instructions"].endswith(text)
+        assert args["tools"] == [] and args["tool_choice"] == "none"
+        assert args["allow_interruptions"]
+        assert "error" in await invoke(b, "sample", sample=key)
+
+
+@pytest.mark.asyncio
+async def test_active_settings_do_not_change_when_next_connection_is_saved(tmp_path):
+    b = controls(tmp_path)
+    b.session.current_agent.voice_settings = {
+        "warmth": "low",
+        "google_voice": "Sulafat",
+        "turn_end_pause": "800",
+    }
+    await invoke(b, "save", values={"warmth": "high", "turn_end_pause": "1200"})
+    status = await invoke(b, "status")
+    assert status["active_settings"]["warmth"] == "low"
+    assert status["active_settings"]["turn_end_pause"] == "800"
+    assert status["effective"]["warmth"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_active_style_comes_from_agent_instructions_not_stale_companion_preferences(
+    tmp_path,
+):
+    from personality import style_block
+
+    b = controls(tmp_path)
+    b.session.current_agent.instructions = style_block({"warmth": "high"})
+    b.session.userdata["_personality_preferences"] = {"warmth": "low"}
+    status = await invoke(b, "status")
+    assert status["active_settings"]["warmth"] == "high"
+
+
+def test_model_uses_one_explicit_settings_snapshot_during_connection(monkeypatch):
+    import model_config
+
+    constructor = Mock(return_value=object())
+    monkeypatch.setattr(model_config.google.realtime, "RealtimeModel", constructor)
+    model_config.realtime_model(
+        "fixture-key", preferences={"google_voice": "Kore", "turn_end_pause": "1200"}
+    )
+    options = constructor.call_args.kwargs
+    assert options["voice"] == "Kore"
+    assert (
+        options[
+            "realtime_input_config"
+        ].automatic_activity_detection.silence_duration_ms
+        == 1200
+    )

@@ -6,6 +6,7 @@ See https://docs.livekit.io/testing/observability/data/ for metric definitions.
 
 import logging
 import math
+import statistics
 from collections import deque
 from contextlib import contextmanager
 from time import monotonic
@@ -56,6 +57,8 @@ class Performance:
                 "samples": len(values),
                 "mean_ms": round(sum(values) / len(values), 2),
                 "max_ms": max(values),
+                "median_ms": round(statistics.median(values), 2),
+                "p95_ms": sorted(values)[math.ceil(0.95 * len(values)) - 1],
             }
             for name, values in stages.items()
         }

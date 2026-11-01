@@ -1,8 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LocalParticipant } from "livekit-client";
 import {
   voiceDraft,
+  hasPendingVoiceSettings,
+  diagnosticRows,
+  parseVoiceSlots,
+  type TimingRow,
   voicePatch,
   type VoiceSnapshot,
 } from "../lib/voice-settings";
@@ -25,6 +29,7 @@ export default function VoiceControls({
   wakeState: string;
   localTimings: () => unknown;
 }) {
+  const connectionEpoch = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -32,12 +37,15 @@ export default function VoiceControls({
   const [slots, setSlots] = useState<Record<string, Record<string, string>>>(
     {},
   );
+  const [sample, setSample] = useState("neutral");
+  const [savedPending, setSavedPending] = useState(false);
+  const [timings, setTimings] = useState<TimingRow[]>([]);
   const [diagnostics, setDiagnostics] = useState("");
   const [cues, setCues] = useState("subtle");
   useEffect(() => {
     try {
       setSlots(
-        JSON.parse(localStorage.getItem("ariana.voice.comparisons") || "{}"),
+        parseVoiceSlots(localStorage.getItem("ariana.voice.comparisons")),
       );
       const saved = localStorage.getItem("ariana.listening-cues");
       if (["off", "subtle", "expressive"].includes(saved || ""))
@@ -50,7 +58,7 @@ export default function VoiceControls({
       await participant.performRpc({
         destinationIdentity: destination,
         method: "ariana.voice-settings",
-        payload: JSON.stringify({ action, values }),
+        payload: JSON.stringify({ action, values, ...(action === "save" && draft.google_voice === "" ? {reset: ["google_voice"]} : {}), ...(action === "sample" ? {sample} : {}) }),
         responseTimeout: 10000,
       }),
     );
@@ -59,14 +67,21 @@ export default function VoiceControls({
   }
   useEffect(() => {
     let canceled = false;
+    connectionEpoch.current++;
+    setPending(false);
+    setTimings([]);
+    setDiagnostics("");
     if (!ready || !destination) {
       setSnapshot(null);
+      setSavedPending(false);
+      setMessage("Connect to change voice settings.");
       return;
     }
     void rpc("status")
       .then((result) => {
         if (canceled) return;
         setSnapshot(result);
+        setSavedPending(hasPendingVoiceSettings(result));
         setDraft(voiceDraft(result));
         setMessage("Voice and style changes apply on your next connection.");
       })
@@ -76,9 +91,11 @@ export default function VoiceControls({
       });
     return () => {
       canceled = true;
+      connectionEpoch.current++;
     };
   }, [ready, destination, participant]);
   async function run(action: "save" | "sample" | "standby") {
+    const epoch = connectionEpoch.current;
     setPending(true);
     if (action === "standby") onStandby();
     try {
@@ -86,23 +103,27 @@ export default function VoiceControls({
         action,
         action === "save" ? voicePatch(draft) : undefined,
       );
+      if (epoch !== connectionEpoch.current) return;
       if (action === "standby") {
         setMessage("Returning to microphone-muted standby.");
       }
-      if (action === "save")
+      if (action === "save") {
+        setSavedPending(true);
         setMessage(
           "Saved. End and reconnect when ready to apply; the current conversation was not interrupted.",
         );
+      }
       if (action === "sample")
         setMessage(
           `Sample requested with active voice ${result.voice}. Content is fixed; Live generation can vary.`,
         );
     } catch (error) {
+      if (epoch !== connectionEpoch.current) return;
       setMessage(
         error instanceof Error ? error.message : "Voice control failed.",
       );
     } finally {
-      setPending(false);
+      if (epoch === connectionEpoch.current) setPending(false);
     }
   }
   function slot(name: string, save: boolean) {
@@ -119,7 +140,12 @@ export default function VoiceControls({
     <section className="voice-settings" aria-label="Voice and conversation">
       <h3>Voice and conversation</h3>
       <p role="status">{message}</p>
-      <p>Active voice: {snapshot?.active_voice || "Not connected"}</p>
+      <div className="effective-settings">
+        <strong>In this conversation</strong>
+        <p>Active voice: {snapshot?.active_voice || "Not connected"}</p>
+        {snapshot?.active_settings && <p>{Object.entries(snapshot.active_settings).filter(([key]) => key !== "google_voice").map(([key,value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")}</p>}
+        {savedPending && <p className="pending-settings" role="status">Saved changes awaiting a new connection. The settings above remain active.</p>}
+      </div>
       <label>
         Gemini voice
         <select
@@ -128,16 +154,17 @@ export default function VoiceControls({
           value={draft.google_voice || ""}
           onChange={(e) => setDraft({ ...draft, google_voice: e.target.value })}
         >
-          <option value="">Keep configured default</option>
+          <option value="">Configured default{snapshot?.configured_default_voice ? ` · ${snapshot.configured_default_voice}` : ""} (clear override)</option>
           {(snapshot?.voices || ["Sulafat"]).map((voice) => (
             <option key={voice}>{voice}</option>
           ))}
         </select>
       </label>
       <label>
-        Turn-end silence
+        Turn-end silence · Gemini only
         <select
           aria-label="Gemini turn-end silence"
+          disabled={!snapshot || pending}
           value={draft.turn_end_pause || "provider"}
           onChange={(e) =>
             setDraft({ ...draft, turn_end_pause: e.target.value })
@@ -154,6 +181,11 @@ export default function VoiceControls({
         replies. This does not classify interruptions; test with your
         microphone.
       </small>
+      <label>Speaking rate · Local only
+        <select aria-label="Local speaking rate" disabled={!snapshot || pending} value={draft.local_speed || "1.0"} onChange={event => setDraft({...draft, local_speed:event.target.value})}>
+          {(snapshot?.local_speeds || ["1.0"]).map(speed => <option key={speed} value={speed}>{speed}×</option>)}
+        </select>
+      </label>
       <small>
         Normal uses Gemini native audio. Local keeps its own Kokoro voice; a
         saved Gemini preset applies when you next connect to Normal.
@@ -168,6 +200,7 @@ export default function VoiceControls({
             {key}
             <select
               aria-label={`Conversation ${key}`}
+              disabled={pending}
               value={draft[key] || ""}
               onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
             >
@@ -200,7 +233,12 @@ export default function VoiceControls({
             </button>
           </span>
         ))}
-        <p>{snapshot?.sample_text}</p>
+        <label>Evaluation sample
+          <select aria-label="Evaluation sample" value={sample} onChange={event => setSample(event.target.value)}>
+            {Object.keys(snapshot?.samples || {neutral: ""}).map(key => <option key={key} value={key}>{key}</option>)}
+          </select>
+        </label>
+        <p className="sample-script">{snapshot?.samples?.[sample] || snapshot?.sample_text}</p>
         <button
           disabled={!ready || busy || pending}
           onClick={() => void run("sample")}
@@ -249,19 +287,16 @@ export default function VoiceControls({
         <summary>Numerical diagnostics</summary>
         <button
           disabled={!ready}
-          onClick={() =>
-            void rpc("status")
-              .then((result) =>
-                setDiagnostics(
-                  JSON.stringify(
-                    { backend: result.diagnostics, browser: localTimings() },
-                    null,
-                    2,
-                  ),
-                ),
-              )
-              .catch(() => setDiagnostics("Diagnostics unavailable."))
-          }
+          onClick={() => {
+            const epoch = connectionEpoch.current;
+            void rpc("status").then(result => {
+              if (epoch !== connectionEpoch.current) return;
+              setTimings(diagnosticRows(result.diagnostics));
+              setDiagnostics(JSON.stringify({backend:result.diagnostics,browser:localTimings()},null,2));
+            }).catch(() => {
+              if (epoch === connectionEpoch.current) setDiagnostics("Diagnostics unavailable.");
+            });
+          }}
         >
           Refresh timings
         </button>
@@ -269,7 +304,13 @@ export default function VoiceControls({
           Local event timings, not provider compute time or sound reaching your
           ears. No transcripts or audio are stored here.
         </small>
-        <pre>{diagnostics}</pre>
+        {timings.length > 0 && <div className="timing-table"><table>
+          <caption>Session latency · milliseconds</caption>
+          <thead><tr><th scope="col">Stage</th><th scope="col">Count</th><th scope="col">Median</th><th scope="col">p95</th></tr></thead>
+          <tbody>{timings.map(row => <tr key={row.stage}><th scope="row">{row.stage.replaceAll("_", " ")}</th><td>{row.samples}</td><td>{row.median}</td><td>{row.p95}</td></tr>)}</tbody>
+        </table></div>}
+        <small>Up to 100 recent backend measurements. p95 uses nearest rank; small samples are exploratory, not a performance guarantee.</small>
+        <details><summary>Raw timing details</summary><pre>{diagnostics}</pre></details>
       </details>
     </section>
   );

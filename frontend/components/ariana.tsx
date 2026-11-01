@@ -210,6 +210,7 @@ function Workspace({
   const startLatest = useRef<(asText?: boolean) => Promise<void>>(
     async () => {},
   );
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const wakeConversation = useRef(new WakeConversation());
   const wakeActivity = useRef(false);
   const [listeningCues, setListeningCues] = useState("subtle");
@@ -240,14 +241,14 @@ function Workspace({
     })),
     ...sharedMessages.map((message) => ({ ...message, isAgent: false })),
   ].sort((a, b) => a.timestamp - b.timestamp);
-  const status = providerError
+  const status = wakeState === "Activating" ? "Activating" : providerError
     ? "Connection needs attention"
     : reconnecting
       ? "Reconnecting"
       : !connected
         ? connecting
           ? "Connecting"
-          : "Ready when you are"
+          : "Standby"
         : agent.state === "failed"
           ? "Agent unavailable"
           : agent.state === "speaking"
@@ -523,15 +524,17 @@ function Workspace({
           if (!wakeConversation.current.isPending(token)) return;
           throw new Error("The voice agent did not become ready. Capture remains muted.");
         }
+        setMediaBusy(true);
         const published = await publishWakeMicrophone(wakeConversation.current, token, ()=>performance.now(), async()=>{
           if (session.room.state!==ConnectionState.Connected) throw new Error("Voice connection ended before capture was ready.");
           await localParticipant.setMicrophoneEnabled(true);
           if (!localParticipant.isMicrophoneEnabled) throw new Error("Voice capture did not become ready.");
-        }, async()=>{await localParticipant.setMicrophoneEnabled(false);});
+        }, async()=>{await localParticipant.setMicrophoneEnabled(false);}).finally(() => setMediaBusy(false));
         if (!published) return;
         recordVoiceTiming("wake_event_to_microphone_ready", started);
         setWakeState("Listening");
       } catch (err) {
+        if (lifecycle.current.sleeping || lifecycle.current.paused) return;
         wakeConversation.current.cancel();
         setWakeState("Muted");
         setError(friendlyError(err));
@@ -643,16 +646,21 @@ function Workspace({
   }, [isMicrophoneEnabled, localParticipant]);
 
   useEffect(() => {
-    const cancel = () => { wakeConversation.current.cancel(); setWakeState("Muted"); };
+    const cancel = () => { wakeConversation.current.cancel(); setWakeState("Standby"); };
     const standby = () => {
       cancel();
       void localParticipant.setMicrophoneEnabled(false).then(()=>setWakeState("Standby")).catch(err=>setError(friendlyError(err)));
     };
-    for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.addEventListener(name, cancel);
+    for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.addEventListener(name, standby);
+    const consent = (event: Event) => {
+      if ((event as CustomEvent).detail?.enabled === false && wakeConversation.current.pending) standby();
+    };
+    window.addEventListener("ariana:wake-status", consent);
     window.addEventListener("ariana:standby", standby);
     return () => {
-      for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.removeEventListener(name, cancel);
+      for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.removeEventListener(name, standby);
       window.removeEventListener("ariana:standby", standby);
+      window.removeEventListener("ariana:wake-status", consent);
       cancel();
     };
   }, [localParticipant]);
@@ -672,6 +680,23 @@ function Workspace({
     setWakeState("Muted");
     void localParticipant.setMicrophoneEnabled(false).catch(()=>{});
   }, [providerError, reconnecting, localParticipant]);
+
+  useEffect(() => {
+    let disposed = false;
+    let permission: PermissionStatus | undefined;
+    const changed = () => {
+      if (permission?.state === "denied") {
+        window.dispatchEvent(new Event("ariana:standby"));
+        setError("Microphone permission was denied. Allow microphone access in your browser or Mac settings, then explicitly unmute; text remains available.");
+      }
+    };
+    void navigator.permissions?.query({name: "microphone" as PermissionName}).then(value => {
+      if (disposed) return;
+      permission = value;
+      permission.addEventListener("change", changed);
+    }).catch(() => {});
+    return () => { disposed = true; permission?.removeEventListener("change", changed); };
+  }, []);
 
   async function end() {
     wakeConversation.current.cancel();
@@ -799,13 +824,22 @@ function Workspace({
           {lastCaption}
         </p>
       </div>
-      <p className="sr-only" role="status">
-        {status}
-      </p>
+      <section className="conversation-status" aria-label="Conversation state" aria-live="polite">
+        <span className="eyebrow">{assistantName} · your companion</span>
+        <h2>{issue ? (/permission|denied|allow microphone/i.test(issue) ? "Microphone denied" : "Error") : status}</h2>
+        <p>{wakeState === "Activating" ? "Wait for Listening, then say your command." : isMicrophoneEnabled ? "Conversation microphone is on. You can interrupt at any time." : "Conversation microphone is off. Local wake detection may still be listening if enabled."}</p>
+        {wakeState === "Activating" && <button onClick={() => window.dispatchEvent(new Event("ariana:standby"))}>Cancel activation</button>}
+      </section>
+      <section className="conversation-preview" aria-label="Recent conversation" aria-live="polite" aria-relevant="additions text">
+        {conversation.length > 0 && <button className="conversation-history-link" onClick={() => history.current?.showModal()}>View full conversation &amp; activity</button>}
+        {conversation.length ? conversation.slice(-3).map(message => <article key={message.id}>
+          <span>{message.isAgent ? assistantName : "You"}</span><p>{message.message}</p>
+        </article>) : <p className="conversation-empty">A little space to think out loud.<br />Start with the microphone, or tap the orb to connect.</p>}
+      </section>
       <div className="quiet-controls">
         <button
           className="icon-button"
-          disabled={mediaBusy || connecting}
+          disabled={mediaBusy || connecting || wakeState === "Activating"}
           aria-label={
             connected
               ? isMicrophoneEnabled
@@ -815,6 +849,8 @@ function Workspace({
           }
           aria-pressed={connected && isMicrophoneEnabled}
           onClick={() => {
+            wakeConversation.current.cancel();
+            setWakeState("Standby");
             if (!connected) void start();
             else
               void media(() =>
@@ -830,6 +866,7 @@ function Workspace({
         </button>
         <button
           className="icon-button"
+          ref={settingsButton}
           aria-label="Settings"
           onClick={() => dialog.current?.showModal()}
         >
@@ -907,6 +944,7 @@ function Workspace({
         ref={dialog}
         className="glass-dialog settings-dialog"
         aria-labelledby="settings-title"
+        onClose={() => settingsButton.current?.focus()}
         onClick={(event) => {
           if (event.target === dialog.current) dialog.current?.close();
         }}
