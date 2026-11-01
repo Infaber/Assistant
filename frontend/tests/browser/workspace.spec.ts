@@ -523,3 +523,18 @@ test('workspace panels fit desktop, tablet and narrow mobile without overlap',as
     if(viewport.width>900){const nav=await page.locator('.workspace-nav>button').last().boundingBox();const engine=await page.locator('.ai-mode-control').boundingBox();expect(nav!.y+nav!.height).toBeLessThan(engine!.y);}
   }
 });
+
+test('Unrestricted selects a red interface without claiming an active Local connection',async ({page})=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'Unrestricted',exact:true}).click();
+  await expect(page.locator('.orb-stage')).toHaveAttribute('data-theme','local');
+  await expect(page.locator('canvas')).toHaveAttribute('data-theme','local');
+  await expect(page.locator('canvas')).toHaveAttribute('data-mode','normal');
+  await expect.poll(()=>page.locator('.primary-voice-action').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(255, 76, 86)');
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(36, 22, 25)');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Normal',exact:true}).click();
+  await expect(page.locator('canvas')).toHaveAttribute('data-theme','normal');
+  await expect(page.locator('.orb-stage')).toHaveAttribute('data-theme','normal');
+});

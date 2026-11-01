@@ -108,3 +108,36 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 /* Immediate visibility keeps focus deterministic when entering from a dialog. */
 .input-overlay {display:none;transition:none;}
 .input-overlay.input-open {display:block;}
+/* Unrestricted is a complete red accent system, including modal surfaces. */
+.orb-stage[data-theme="local"] {--accent:#ffb0b0;--line:#ff6b6b20;background:#160e10;color:#fff0ef;}
+.orb-stage[data-theme="local"] .voice-space {background:radial-gradient(ellipse at 50% 42%,#351318,#10090c 68%);border-color:#ff6b6b30;}
+.orb-stage[data-theme="local"] .conversation-preview,
+.orb-stage[data-theme="local"] .message-launcher {background:#211416;border-color:#ff727226;}
+.orb-stage[data-theme="local"] .section-kicker,
+.orb-stage[data-theme="local"] .conversation-status .eyebrow,
+.orb-stage[data-theme="local"] .conversation-preview article span,
+.orb-stage[data-theme="local"] .voice-space-label,
+.orb-stage[data-theme="local"] .conversation-history-link {color:#e99799;}
+.orb-stage[data-theme="local"] .brand-mark,
+.orb-stage[data-theme="local"] .nav-current,
+.orb-stage[data-theme="local"] .ai-mode-segments button:last-child[aria-pressed="true"] {background:#ff41411c;border-color:#ff57573d;color:#ffc0bd;}
+.orb-stage[data-theme="local"] .primary-voice-action,
+.orb-stage[data-theme="local"] .launcher-arrow {background:#ff4c56;color:#24070b;}
+.orb-stage[data-theme="local"] .primary-voice-action:hover {background:#ff737b;}
+.orb-stage[data-theme="local"] .empty-symbol,
+.orb-stage[data-theme="local"] .conversation-empty button,
+.orb-stage[data-theme="local"] .voice-space-footer button {color:#ffaeae;border-color:#ff72722c;}
+.orb-stage[data-theme="local"] .composer {background:#30191d;border-color:#ec686844;}
+.orb-stage[data-theme="local"] .glass-dialog,
+.orb-stage[data-theme="local"] .glass-dialog header {background:#241619;}
+.orb-stage[data-theme="local"] .voice-settings select,
+.orb-stage[data-theme="local"] .voice-settings button,
+.orb-stage[data-theme="local"] .settings-index button {background:#3a2024;color:#ffcfca;border-color:#ff7b7b30;}
+.orb-stage[data-theme="local"] .effective-settings {background:#ff6b6b09;border-color:#ff7b7b30;}
+.orb-stage[data-theme="local"] .effective-settings strong {color:#ffc1bd;}
+.orb-stage[data-theme="local"] input {accent-color:#ff515b;}
+.orb-stage[data-theme="local"] :focus-visible {outline-color:#ff8c93;}
+.ariana-orb[data-mode="local"] {filter:none;}
+.ariana-orb[data-theme="local"]:not([data-style="0"]) {filter:grayscale(1) sepia(1) saturate(8) hue-rotate(315deg);}
+.style-swatch.swatch-0 {background:radial-gradient(circle at 30% 25%,#bde7dc55,transparent 35%),repeating-linear-gradient(155deg,#071a1c 0 3px,#5ba899 4px,#102a28 5px);border-color:#8ecabc66;box-shadow:inset -8px -5px 10px #000a,0 0 12px #6dcdb322;}
+.orb-stage[data-theme="local"] .style-swatch {filter:grayscale(1) sepia(1) saturate(8) hue-rotate(315deg);}

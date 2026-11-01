@@ -12,18 +12,20 @@ export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 const TAU = Math.PI * 2;
 export default function ArianaOrb({
   mode = "normal",
+  theme = mode,
   style = 0,
   state = "idle",
   level = 0,
 }: {
   mode?: "normal" | "local";
+  theme?: "normal" | "local";
   style?: number;
   state?: OrbState;
   level?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const current = useRef({ style, state, level });
-  current.current = { style, state, level };
+  const current = useRef({ style, state, level, theme });
+  current.current = { style, state, level, theme };
   useEffect(() => {
     const element = canvas.current!;
     const context = element.getContext("2d", { alpha: false });
@@ -62,25 +64,43 @@ export default function ArianaOrb({
       const t = time,
         e = energy;
       if (kind === 0) {
-        ctx.rotate(Math.sin(t * 0.12) * 0.18);
-        for (let j = 0; j < 40; j++) {
-          const points = [];
-          for (let i = 0; i <= 80; i++) {
-            const u = i / 80,
-              a = u * TAU;
-            const r = 0.23 + 0.045 * Math.sin(a * 2 + j * 0.11 + t * 0.6);
-            points.push([
-              Math.sin(a + j * 0.055) * r * (0.55 + Math.sin(j * 0.075) * 0.35),
-              Math.cos(a) * r +
-                Math.sin(a * 3 + t + j * 0.09) * (0.024 + e * 0.04),
-            ]);
+        // A volumetric core with luminous, flowing surface bands.
+        const red = current.current.theme === "local";
+        const rgb = red ? "255,45,55" : "98,229,211";
+        const pearl = red ? "255,204,194" : "216,255,245";
+        const radius = 0.295;
+        const aura = ctx.createRadialGradient(0,0,0.18,0,0,0.43);
+        aura.addColorStop(0, `rgba(${rgb},0)`);
+        aura.addColorStop(0.68, `rgba(${rgb},${0.13+e*0.08})`);
+        aura.addColorStop(1, `rgba(${rgb},0)`);
+        ctx.fillStyle=aura;ctx.fillRect(-0.5,-0.5,1,1);
+        const body=ctx.createRadialGradient(-0.11,-0.13,0.01,0.02,0.03,0.34);
+        body.addColorStop(0,red ? "#64232c" : "#22554e");
+        body.addColorStop(0.38,red ? "#22080f" : "#091f20");
+        body.addColorStop(0.78,"#020608");
+        body.addColorStop(1,red ? "#991928" : "#347e78");
+        ctx.fillStyle=body;ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.fill();
+        ctx.save();ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.clip();
+        ctx.rotate(-0.55+Math.sin(t*0.25)*0.14);
+        for(let j=0;j<54;j++) {
+          const latitude=-1.48+j/53*2.96;
+          const points=[];
+          for(let i=0;i<=130;i++) {
+            const a=-Math.PI+i/130*TAU;
+            const wave=Math.sin(a*2+t*0.65+j*0.08)*(0.055+e*0.025);
+            const y=Math.sin(latitude)*radius;
+            const r=Math.cos(latitude)*radius;
+            points.push([Math.sin(a)*r,y+Math.cos(a)*r*0.35+wave*Math.cos(latitude)]);
           }
-          line(
-            points,
-            `rgba(${148 + j * 1.8},${208 + j * 0.4},${247 - j * 2},${0.3 + j * 0.003})`,
-            0.0009,
-          );
+          const luminous=Math.pow((Math.sin(j*0.19-t*0.8)+1)/2,5);
+          line(points,`rgba(${luminous>0.65 ? pearl : rgb},${0.07+luminous*0.63})`,0.0012+luminous*0.0015);
         }
+        const sheen=ctx.createRadialGradient(-0.13,-0.18,0,-0.1,-0.15,0.23);
+        sheen.addColorStop(0,`rgba(${pearl},.38)`);sheen.addColorStop(0.3,`rgba(${rgb},.08)`);sheen.addColorStop(1,`rgba(${rgb},0)`);
+        ctx.fillStyle=sheen;ctx.fillRect(-0.5,-0.5,1,1);ctx.restore();
+        const rim=ctx.createLinearGradient(-0.25,-0.25,0.25,0.25);
+        rim.addColorStop(0,`rgba(${pearl},.85)`);rim.addColorStop(0.3,`rgba(${rgb},.12)`);rim.addColorStop(0.65,`rgba(${rgb},.04)`);rim.addColorStop(1,`rgba(${rgb},.65)`);
+        ctx.strokeStyle=rim;ctx.lineWidth=.002;ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.stroke();
       } else if (kind === 1 || kind === 5) {
         const glass = ctx.createRadialGradient(
           -0.075,
@@ -263,6 +283,7 @@ export default function ArianaOrb({
         breathing * (1 + energy * 0.025),
         breathing * (1 + energy * 0.025),
       );
+      if (lastStyle !== 0 || blend < 1) {
       const halo = ctx.createRadialGradient(0, 0, 0.27, 0, 0, 0.47);
       halo.addColorStop(0, "rgba(0,8,28,0)");
       halo.addColorStop(0.6, `rgba(0,58,173,${0.055 + energy * 0.03})`);
@@ -297,6 +318,7 @@ export default function ArianaOrb({
           }
       }
       ctx.restore();
+      }
       const eased = blend * blend * (3 - 2 * blend);
       if (blend < 1) inner(oldStyle, 1 - eased);
       inner(lastStyle, eased);
@@ -323,6 +345,7 @@ export default function ArianaOrb({
       className="ariana-orb"
       aria-hidden="true"
       data-mode={mode}
+      data-theme={theme}
       data-style={style}
       data-state={state}
     />

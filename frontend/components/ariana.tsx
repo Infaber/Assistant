@@ -767,6 +767,7 @@ function Workspace({
       : "");
   return (
     <main
+      data-theme={selectedMode}
       className={`orb-stage ${chrome ? "chrome-visible" : ""}`}
       onPointerMove={revealChrome}
       onPointerDown={revealChrome}
@@ -824,6 +825,7 @@ function Workspace({
         >
           <ArianaOrb
             mode={ai.status?.mode || "normal"}
+            theme={selectedMode}
             style={orbStyle}
             state={orbState}
             level={
