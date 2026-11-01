@@ -876,7 +876,7 @@ function Workspace({
       <StartAudio label={`Enable ${assistantName}’s audio`} className="enable-audio" />
       {issue && (
         <div className="error-banner" role="alert">
-          <p>{issue}</p>
+          <p tabIndex={0} aria-label="Error details">{issue}</p>
           <button
             onClick={() => {
               setError("");

@@ -624,3 +624,31 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 .timing-table caption {text-align:left;padding:12px 0;color:#cfc0ea;}
 
 .conversation-history-link {display:block;margin:0 0 6px auto;color:#cfc0ea;font-size:12px;padding:8px 0;}
+
+/* Reserve separate space for readable conversation/error content and controls. */
+.orb-stage:has(.conversation-preview article, .error-banner) .orb-center {
+  top: 140px;
+  bottom: calc(130px + 24vh);
+  transform: none;
+}
+.orb-stage:has(.conversation-preview article, .error-banner) .orb-touch {
+  width: min(35vmin, 220px);
+  height: min(35vmin, 220px);
+}
+.error-banner {
+  position: fixed;
+  top: auto;
+  bottom: 120px;
+  max-height: 24vh;
+  background: #17171ff5;
+}
+.error-banner p {min-width:0;max-height:18vh;overflow:auto;overflow-wrap:anywhere;}
+.orb-stage:has(.error-banner) .conversation-preview {display:none;}
+@media(max-width:600px) {
+  .error-banner {bottom:240px;max-height:18vh;}
+  .error-banner p {max-height:calc(18vh - 30px);}
+  .orb-stage:has(.conversation-preview article, .error-banner) .orb-center {bottom:calc(260px + 18vh);}
+}
+@media(max-height:650px) {
+  .orb-stage:has(.conversation-preview article, .error-banner) .orb-center {display:none;}
+}

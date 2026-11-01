@@ -4,6 +4,7 @@ import type { LocalParticipant } from "livekit-client";
 import {
   voiceDraft,
   hasPendingVoiceSettings,
+  settingAppliesToMode,
   diagnosticRows,
   parseVoiceSlots,
   type TimingRow,
@@ -97,6 +98,7 @@ export default function VoiceControls({
   async function run(action: "save" | "sample" | "standby") {
     const epoch = connectionEpoch.current;
     setPending(true);
+    let saved = false;
     if (action === "standby") onStandby();
     try {
       const result = await rpc(
@@ -108,10 +110,15 @@ export default function VoiceControls({
         setMessage("Returning to microphone-muted standby.");
       }
       if (action === "save") {
-        setSavedPending(true);
-        setMessage(
-          "Saved. End and reconnect when ready to apply; the current conversation was not interrupted.",
-        );
+        saved = true;
+        const refreshed: Snapshot = await rpc("status");
+        if (epoch !== connectionEpoch.current) return;
+        setSnapshot(refreshed);
+        const changesPending = hasPendingVoiceSettings(refreshed);
+        setSavedPending(changesPending);
+        setMessage(changesPending
+          ? "Saved. End and reconnect when ready to apply; the current conversation was not interrupted."
+          : "Saved. Settings for this engine already match this conversation; no reconnect is needed.");
       }
       if (action === "sample")
         setMessage(
@@ -119,9 +126,13 @@ export default function VoiceControls({
         );
     } catch (error) {
       if (epoch !== connectionEpoch.current) return;
-      setMessage(
-        error instanceof Error ? error.message : "Voice control failed.",
-      );
+      if (saved) {
+        setSavedPending(false);
+        setSnapshot(current => current ? {...current, effective: undefined} : current);
+      }
+      setMessage(saved
+        ? "Saved, but the effective settings could not be refreshed. Reopen the connection's settings after reconnecting to verify them."
+        : error instanceof Error ? error.message : "Voice control failed.");
     } finally {
       if (epoch === connectionEpoch.current) setPending(false);
     }
@@ -143,9 +154,11 @@ export default function VoiceControls({
       <div className="effective-settings">
         <strong>In this conversation</strong>
         <p>Active voice: {snapshot?.active_voice || "Not connected"}</p>
-        {snapshot?.active_settings && <p>{Object.entries(snapshot.active_settings).filter(([key]) => key !== "google_voice").map(([key,value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")}</p>}
+        {snapshot?.active_settings && <p>{Object.entries(snapshot.active_settings).filter(([key]) => key !== "google_voice" && settingAppliesToMode(key, snapshot.mode)).map(([key,value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")}</p>}
         {savedPending && <p className="pending-settings" role="status">Saved changes awaiting a new connection. The settings above remain active.</p>}
       </div>
+      <p className="settings-help">Controls below edit a draft. Loading A/B changes only the draft; saving updates preferences, and reconnecting applies them to a new session.</p>
+      {snapshot?.effective && <p className="saved-settings">Saved for {snapshot.mode === "local" ? "Local" : "Normal"}: {Object.entries(snapshot.effective).filter(([key]) => settingAppliesToMode(key, snapshot.mode)).map(([key,value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")}</p>}
       <label>
         Gemini voice
         <select

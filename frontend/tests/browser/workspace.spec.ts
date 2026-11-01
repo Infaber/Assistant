@@ -444,3 +444,46 @@ test("mobile companion remains within viewport with reduced motion", async ({pag
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
 });
+
+test('long errors remain scrollable above controls on short mobile screens', async ({page})=>{
+  await page.setViewportSize({width:390,height:568});
+  await page.route('**/api/connection',route=>route.fulfill({status:403,json:{error:'Microphone permission denied. Review microphone access in System Settings. '+ 'Connection details '.repeat(60)}}));
+  await page.goto('/');
+  await page.getByRole('button',{name:'Start conversation',exact:true}).first().click();
+  await expect(page.getByRole('heading',{name:'Microphone denied',exact:true})).toBeVisible();
+  const error=await page.locator('.error-banner').boundingBox();
+  const controls=await page.locator('.ai-mode-control').boundingBox();
+  expect(error!.y).toBeGreaterThan(130);
+  expect(error!.y+error!.height).toBeLessThan(controls!.y);
+  expect(await page.locator('.error-banner p').evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);
+  await expect(page.getByRole('button',{name:'Retry',exact:true})).toBeVisible();
+  await page.getByLabel('Error details').focus();
+  await page.keyboard.press('End');
+  await expect.poll(()=>page.locator('.error-banner p').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  const dialog=await page.getByRole('dialog').boundingBox();
+  expect(dialog!.y).toBeGreaterThanOrEqual(0);
+  expect(dialog!.y+dialog!.height).toBeLessThanOrEqual(568);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button',{name:'Settings',exact:true})).toBeFocused();
+});
+
+
+test('synthetic long transcript stays separate from orb and controls',async ({page})=>{
+  for (const height of [844,568]) {
+    await page.setViewportSize({width:390,height});
+    await page.goto('/');
+    await page.locator('.conversation-preview').evaluate(el=>{
+      const article=document.createElement('article');
+      const p=document.createElement('p');
+      p.textContent='Synthetic layout content only. '+ 'Long-message-without-breaks'.repeat(100);
+      article.append(p);el.replaceChildren(article);
+    });
+    const preview=await page.locator('.conversation-preview').boundingBox();
+    const controls=await page.locator('.ai-mode-control').boundingBox();
+    expect(preview!.y+preview!.height).toBeLessThan(controls!.y);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    if(height>650){const orb=await page.locator('.orb-touch').boundingBox();expect(orb!.y+orb!.height).toBeLessThan(preview!.y);}
+    else await expect(page.locator('.orb-center')).toBeHidden();
+  }
+});

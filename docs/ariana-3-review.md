@@ -1,6 +1,6 @@
 # Ariana 3.0 — conversation and companion upgrade
 
-Review date: 1 November 2026. No installation, deployment, microphone permission grant, production configuration change, merge, or remote push was performed.
+Review date: 1 November 2026. The initial polish commit `39946e230a0e3911180d22c7dcfc8182587b85c8` was pushed to `codex/ariana-3-polish` at the user’s request. The completion pass below installs development dependencies in an isolated checkout. No Ariana app installation, deployment, microphone permission grant, production configuration change or merge was performed.
 
 ## Baseline and scope
 
@@ -54,7 +54,7 @@ Style settings remain model guidance. They are not exact pitch, emotion, laughte
 
 References consulted: [LiveKit turns](https://docs.livekit.io/agents/logic/turns/), [speech and audio](https://docs.livekit.io/agents/multimodality/audio/), installed LiveKit 1.8.5 source and local Kokoro adapter, and installed Next.js client-component documentation. The installed SDK supports the arguments used; the CLI reported a docs-server version newer than its own, so installed signatures were checked directly.
 
-## Validation
+## Historical validation before the completion pass
 
 All runtime checks below used existing installed dependencies, including Next.js 16.3.8 and LiveKit Agents 1.8.5. No new dependencies were installed. The prepared security lockfile changes have **not** been runtime-tested with their new packages.
 
@@ -78,7 +78,7 @@ All runtime checks below used existing installed dependencies, including Next.js
 
 Browser tests initially exposed the status heading's incorrect accessibility role and Safari focus restoration behavior. Both were fixed, then the full suite passed. Screenshots were captured in WebKit after canvas rendering: desktop, mobile and settings. They show the real disconnected interface, not a claimed live-model session.
 
-## Dependency advisories
+## Initial dependency review (superseded by completion results below)
 
 Audit date: 1 November 2026. Registry/OSV responses describe known package advisories, not an exploitability assessment of this app.
 
@@ -88,8 +88,29 @@ Audit date: 1 November 2026. Registry/OSV responses describe known package advis
 - Pillow's reported fixes require version 13. OpenTelemetry's attempted resolution updated LiveKit/Google SDKs and moved OpenAI from 2.x to 3.x; that broad change was discarded. These upgrades require a separate compatibility review. No forced major upgrade remains in this diff.
 - esbuild 0.28.2 was already installed transitively through the test tooling. It is now an explicit development dependency for repeatable isolated browser component tests; no new package was installed.
 
-Before merging, install the prepared lockfiles in an isolated development environment and repeat backend/frontend/browser checks. This review does not claim the new dependency set is validated.
+That installation and validation were subsequently completed as recorded below. The historical counts above describe only the earlier environment.
 
 ## Review package
 
-The incremental patch applies to `b396813`. It preserves existing PR #12 functionality. The package includes source, regression tests, screenshots, this report, dependency findings and the Mac listening checklist. No remote branch or PR content was changed.
+The incremental patch applies to `b396813`. It preserves existing PR #12 functionality. The package includes source, regression tests, screenshots, this report, dependency findings and the Mac listening checklist. The initial package preceded the authorized push of `39946e2`; it must not be read as the current remote state.
+
+
+## Completion pass — 1 November 2026
+
+The remote default branch, PR #12 and polish branch were fetched again and matched the baseline above. The focused completion diff is against `39946e2`; it preserves PR #12 and the earlier polish work. A draft PR for the polish branch provides the existing pull-request CI path without broadening workflow triggers. The final commit, CI responses and screenshots are identified in the accompanying completion report.
+
+Successful saves now fetch authoritative effective preferences and compare them with the running session. Identical saves, reverting to active values and clearing an override that resolves to the active voice remove the pending warning. Normal ignores Local rate, while Local ignores Gemini voice and turn-end silence. The backend reports the running engine. Draft controls, saved effective preferences and active settings have separate descriptions. A/B loading remains draft-only. Both the save response and subsequent status refresh retain connection-epoch protection.
+
+A rendered short-mobile error test found that long text overlapped engine controls and extended beyond the viewport. Error text now wraps and scrolls in a bounded panel above controls. Content-bearing states reserve a smaller orb region; short viewports omit the orb in those states to prioritize readable content and recovery controls. Normal standby retains the central orb. Settings remain scrollable, including at 390×568. Screenshots of the actual app are disconnected; the permission-error response and transcript stress content are explicitly synthetic, not live microphone evidence.
+
+### Exact installed environment
+
+A fresh Python 3.14.8 virtual environment was synchronized with `uv sync --locked --dev --extra local-voice --extra wake-word`; every installed registry distribution was compared with `uv.lock` with zero mismatches. `npm ci` installed the committed frontend lockfile. Key versions: Next 16.4.3, React 19.3.0, LiveKit client 2.22.3, Playwright 1.63.0, TypeScript 7.0.2; LiveKit Agents 1.8.5, aiohttp 3.14.5, certifi 2026.10.23, pyasn1 0.6.5, pypdf 6.21.4, yarl 1.25.1, Pillow 12.3.0 and OpenTelemetry API 1.44.0. No lockfile security fix was reverted.
+
+Backend: 542 tests passed, Ruff lint and formatting passed (137 files). The frontend unit suite passed 41 tests; typecheck and the Next 16.4.3 production build passed. Final browser results and exact candidate SHA are in the completion report. Native app compilation, companion state tests, isolated service crash-recovery checks and installer syntax checks passed. The native app was only compiled, never launched. Initial sandbox restrictions on the web server and Swift module cache were resolved using authorized loopback execution and a temporary module-cache directory.
+
+### Current advisories and unexecuted checks
+
+A fresh npm audit reports zero vulnerabilities. OSV checked all 113 locked Python registry packages: the updated aiohttp, certifi, pyasn1, pypdf and yarl versions have no returned findings. Remaining: OpenTelemetry API 1.44.0 (`GHSA-xcq7-p3pf-p88h`) and Pillow 12.3.0 (59 identifiers including aliases, not 59 independently verified vulnerabilities). Complete raw findings accompany the report. Exploitability in Ariana has not been established; this is not a clean Python security audit. The separate major-version compatibility work described above remains necessary.
+
+Physical listening and real-model debugger/simulation checks remain unexecuted: no explicitly configured Google/LiveKit credentials or authorized microphone access were available. All five limitations remain: no independent spoken backchannels; acknowledgment-only speech can interrupt Gemini; immediate wake-plus-command can lose leading words; sustained noise can keep the activity window open; expressive preferences guide the model rather than precisely controlling pitch, laughter or emotion. Follow [the listening checklist](ariana-3-listening-checklist.md): with explicit hardware authorization, compare Normal/Local samples, test stop/wait/no and replacement interruptions, immediate versus delayed wake commands, noise/echo, sleep/reconnect and permission revocation. Record failures and timings from those real runs; no acoustic measurements are inferred from these tests.

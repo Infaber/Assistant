@@ -3,6 +3,7 @@ export type VoiceSnapshot = {
   voices: string[];
   styles: Record<string, string[]>;
   active_voice: string;
+  mode?: "normal" | "local";
   effective?: Record<string, string>;
   active_settings?: Record<string, string>;
   configured_default_voice?: string;
@@ -33,9 +34,16 @@ export function voicePatch(
   );
 }
 
+export function settingAppliesToMode(key: string, mode: "normal" | "local" = "normal"): boolean {
+  if (key === "local_speed") return mode === "local";
+  if (key === "google_voice" || key === "turn_end_pause") return mode === "normal";
+  return true;
+}
+
 export function hasPendingVoiceSettings(status: VoiceSnapshot): boolean {
   if (!status.effective || !status.active_settings) return false;
   return Object.entries(status.effective).some(([key, value]) =>
+    settingAppliesToMode(key, status.mode) &&
     key in status.active_settings! && status.active_settings![key] !== value,
   );
 }

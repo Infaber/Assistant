@@ -92,6 +92,9 @@ class VoiceControls:
                             ),
                         },
                         "active_settings": active,
+                        "mode": getattr(
+                            self.session.current_agent, "ai_mode", "normal"
+                        ),
                         "configured_default_voice": default_voice,
                         "samples": SAMPLES,
                         "voices": sorted(VOICES),

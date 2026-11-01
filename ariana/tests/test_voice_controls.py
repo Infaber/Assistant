@@ -47,6 +47,7 @@ async def test_settings_open_is_read_only_and_never_starts_audio(tmp_path):
     b = controls(tmp_path)
     status = await invoke(b, "status")
     assert status["active_voice"] == "Sulafat"
+    assert status["mode"] == "normal"
     assert not status["backchannel_audio_supported"]
     b.session.generate_reply.assert_not_called()
     b.session.interrupt.assert_not_called()
@@ -297,3 +298,11 @@ def test_model_uses_one_explicit_settings_snapshot_during_connection(monkeypatch
         ].automatic_activity_detection.silence_duration_ms
         == 1200
     )
+
+
+@pytest.mark.asyncio
+async def test_status_reports_running_engine_not_saved_preferences(tmp_path):
+    b = controls(tmp_path)
+    b.session.current_agent.ai_mode = "local"
+    await invoke(b, "save", values={"google_voice": "Leda"})
+    assert (await invoke(b, "status"))["mode"] == "local"
