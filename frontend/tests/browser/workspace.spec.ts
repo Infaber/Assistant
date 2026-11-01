@@ -473,6 +473,11 @@ test('synthetic long transcript stays separate from orb and controls',async ({pa
   for (const height of [844,568]) {
     await page.setViewportSize({width:390,height});
     await page.goto('/');
+    // A working interaction proves hydration finished before DOM-only stress content.
+    await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).not.toBeVisible();
     await page.locator('.conversation-preview').evaluate(el=>{
       const article=document.createElement('article');
       const p=document.createElement('p');
