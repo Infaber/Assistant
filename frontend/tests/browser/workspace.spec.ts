@@ -23,7 +23,7 @@ test("orb is the main screen, typing reveals input, and mobile fits", async ({
         .locator("canvas")
         .evaluate((canvas) => (canvas as HTMLCanvasElement).width),
     )
-    .toBeGreaterThan(200);
+    .toBeGreaterThan(300);
   await page.keyboard.press("h");
   await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, { exact: true })).toHaveValue(
     "h",
@@ -266,9 +266,10 @@ test("keyboard can activate the orb without the typing shortcut stealing Enter",
     });
   });
   await page.goto("/");
-  // The canvas starts in a React effect. Wait for hydration before assigning
+  // A canvas defaults to width 300 before React hydrates. The desktop orb
+  // measures 340 CSS pixels; wait for its effect to resize it before assigning
   // programmatic focus, which WebKit can otherwise lose during the first mount.
-  await expect.poll(() => page.locator("canvas").evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(200);
+  await expect.poll(() => page.locator("canvas").evaluate(canvas => (canvas as HTMLCanvasElement).width)).toBeGreaterThan(300);
   await page.locator(".orb-touch").focus();
   await expect(page.locator(".orb-touch")).toBeFocused();
   await page.keyboard.press("Enter");
