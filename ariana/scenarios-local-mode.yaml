@@ -30,3 +30,17 @@ scenarios:
       Explains that Local recovery remains local and an uncertain write must be
       inspected before another attempt. Does not promise an automatic cloud switch,
       claim a note was actually saved, or execute an action from this hypothetical.
+  - label: Casual answer then real app lookup
+    userdata:
+      fixture: ha_lights
+    instructions: |
+      Your FIRST message must be "What is two plus two? Just the answer."
+      Then say "Are my desk lights on?"
+      Then say "Thanks. What is three plus three? Just the answer."
+      Then say "Don't change anything."
+      End after the reply.
+    agent_expectations: >
+      Answers the arithmetic briefly without app actions. Uses actual fixture tools
+      for the desk light state instead of guessing. Answers the follow-up arithmetic
+      without calling the previously used app tools. Does not change a light or replay
+      a previous operation, and obeys the final instruction to make no changes.

@@ -786,16 +786,16 @@ function Workspace({
         }
       }}
     >
-      <header className="workspace-brand"><span className="brand-mark"><AudioLines size={22} /></span><h1>{assistantName}<small>PERSONAL INTELLIGENCE</small></h1></header>
-      <header className="workspace-header"><div><span className="section-kicker">{assistantName.toUpperCase()} / YOUR SPACE</span><h2>A little more clarity.</h2></div><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span></header>
+      <header className="workspace-brand"><span className="brand-mark"><AudioLines size={22} /></span><h1>{assistantName}<small>A.R.I.A.N.A / SYSTEM</small></h1></header>
+      <header className="workspace-header"><div><span className="section-kicker">{assistantName.toUpperCase()} / YOUR SPACE</span><h2>Personal interface</h2></div><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span></header>
       <nav className="workspace-nav" aria-label="Workspace">
-        <span className="section-kicker">WORKSPACE</span>
+        <span className="section-kicker">SYSTEM CHANNELS</span>
         <button className="nav-current" onClick={() => { if (inputOpen) setInputOpen(false); }}><AudioLines size={18} /> Voice space <span>01</span></button>
         <button onClick={() => history.current?.showModal()}><MessageSquare size={18} /> Conversation <span>{conversation.length || "—"}</span></button>
         <button onClick={() => dialog.current?.showModal()}><Settings2 size={18} /> Preferences</button>
-        <div className="rail-note"><ShieldCheck size={19}/><strong>You're in control.</strong><p>Choose how you connect. Voice, text and engine settings are always within reach.</p></div>
+        <div className="rail-note"><ShieldCheck size={19}/><strong>System access</strong><p>Voice and text channels ready. App actions follow your approval settings.</p></div>
       </nav>
-      <div className="ai-mode-control" aria-label="AI mode"><span className="section-kicker">CONVERSATION ENGINE</span>
+      <div className="ai-mode-control" aria-label="AI mode"><span className="section-kicker">NEURAL ENGINE</span>
         <div className="ai-mode-segments">
           <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal", carryContext).finally(()=>setCarryContext(false))}>Normal</button>
           <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local", carryContext).finally(()=>setCarryContext(false))}>Unrestricted</button>
@@ -805,7 +805,7 @@ function Workspace({
         <label><input type="checkbox" checked={carryContext} disabled={ai.pending} onChange={event=>setCarryContext(event.target.checked)} /> Keep recent conversation for the next switch</label>
         <details><summary>Mode privacy</summary>Conversation transfer is off by default. Enabling it shares up to 24 recent text messages with the selected engine, including Gemini when switching to Normal. Images, attachments, tool results and pending approvals are excluded. Staged attachments are discarded. Saved memories are shared and retrieved when relevant. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
       </div>
-      <section className="voice-space" aria-label="Voice space"><div className="voice-space-label"><AudioLines size={16}/> VOICE SESSION <span>LIVE COMPANION</span></div>
+      <section className="voice-space" aria-label="Voice space"><div className="voice-space-label"><AudioLines size={16}/> VOICE INTERFACE <span>SESSION LINK</span></div>
       {listeningCues!=="off" && connected && isMicrophoneEnabled && !outputActive && inputLevel>0.025 && <div className={`listening-cue ${listeningCues}`} role="status" style={{opacity:Math.min(1,0.45+inputLevel)}}>Listening</div>}
       <div className="orb-center">
         <button
@@ -916,13 +916,13 @@ function Workspace({
       <div className="voice-space-footer"><span><i />{isMicrophoneEnabled ? "Microphone on" : "Microphone off"}</span><button onClick={revealInput}>Type instead <span>⌘ K</span></button></div>
       </section>
       <section className="conversation-preview" aria-label="Recent conversation" aria-live="polite" aria-relevant="additions text">
-        <header className="conversation-panel-header"><div><span className="section-kicker">IN THE MOMENT</span><h2>Conversation</h2></div><MessageSquare size={18} /></header>
+        <header className="conversation-panel-header"><div><span className="section-kicker">SESSION / LIVE TEXT</span><h2>Conversation</h2></div><MessageSquare size={18} /></header>
         {conversation.length > 0 && <button className="conversation-history-link" onClick={() => history.current?.showModal()}>View full conversation &amp; activity</button>}
         {conversation.length ? conversation.slice(-3).map(message => <article key={message.id}>
           <span>{message.isAgent ? assistantName : "You"}</span><p>{message.message}</p>
-        </article>) : <div className="conversation-empty"><span className="empty-symbol"><MessageSquare size={25}/></span><h3>Room for your thoughts.</h3><p>Ask a question, work through an idea, or simply talk. Your conversation will unfold here.</p><button onClick={revealInput}>Write a message <ArrowUpRight size={16}/></button></div>}
+        </article>) : <div className="conversation-empty"><span className="empty-symbol"><MessageSquare size={25}/></span><h3>Awaiting your signal.</h3><p>Voice or text. Ask, explore, or take control. This session’s conversation appears here.</p><button onClick={revealInput}>Write a message <ArrowUpRight size={16}/></button></div>}
       </section>
-      <button className={`message-launcher ${inputOpen ? "launcher-hidden" : ""}`} onClick={revealInput}><MessageSquare size={18}/><span>What's on your mind?</span><kbd>⌘ K</kbd><span className="launcher-arrow"><ArrowUpRight size={18}/></span></button>
+      <button className={`message-launcher ${inputOpen ? "launcher-hidden" : ""}`} onClick={revealInput}><MessageSquare size={18}/><span>Enter a message or command…</span><kbd>⌘ K</kbd><span className="launcher-arrow"><ArrowUpRight size={18}/></span></button>
       <div
         className={`input-overlay ${inputOpen ? "input-open" : ""}`}
         inert={!inputOpen}

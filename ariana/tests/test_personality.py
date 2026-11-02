@@ -88,3 +88,14 @@ def test_preferences_survive_store_recreation_and_instructions_reload(
     assert preferences_path() == tmp_path / "style.json"
     assert PreferencesStore().read()["sarcasm"] == "off"
     assert "sarcasm: off" in configured_instructions()
+
+
+def test_soothing_delivery_is_normal_only_and_preserves_local_voice(monkeypatch):
+    from instructions import configured_instructions
+    from personality import GEMINI_DELIVERY
+
+    monkeypatch.setenv("ARIANA_PERSONA", "ariana")
+    assert GEMINI_DELIVERY in configured_instructions("normal")
+    assert GEMINI_DELIVERY not in configured_instructions("local")
+    monkeypatch.setenv("ARIANA_PERSONA", "jarvis")
+    assert GEMINI_DELIVERY not in configured_instructions("normal")

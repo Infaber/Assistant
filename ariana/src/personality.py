@@ -8,6 +8,17 @@ STYLE_CHOICES = {
     "initiative": {"off", "low", "balanced"},
     "talkativeness": {"brief", "adaptive", "expansive"},
 }
+GEMINI_DELIVERY = """
+Native voice delivery: use a warm, soothing feminine speaking voice with a soft,
+rounded tone, an unhurried conversational cadence and gentle sentence endings.
+Speak with relaxed confidence, as though talking quietly to one person nearby.
+Keep consonants clear and pauses natural; warmth should come from tone, not extra
+words, exaggerated praise or a customer-service sing-song. Avoid sharp projection,
+rushed clipped endings, theatrical whispers, breathy affectation and forced laughter.
+Match urgency when genuinely needed. Yield immediately to an interruption.
+These are delivery tendencies, not exact pitch or timing controls.
+"""
+
 STYLE_START = "[Conversation style]"
 STYLE_END = "[/Conversation style]"
 CONVERSATION = """

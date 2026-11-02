@@ -505,7 +505,7 @@ test('workspace navigation and message entry remain silent and keyboard accessib
   await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:/Conversation/}).click();
   await expect(page.getByRole('heading',{name:'Conversation',exact:true}).last()).toBeVisible();
   await page.getByRole('button',{name:'Close conversation',exact:true}).click();
-  await page.getByRole('button',{name:/What's on your mind/}).click();
+  await page.getByRole('button',{name:/Enter a message or command/}).click();
   await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, {exact:true})).toBeFocused();
   await page.keyboard.press('Escape');
   expect(connections).toBe(0);
