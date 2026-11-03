@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { assistantName } from "../lib/persona";
 import SessionPanel from "./session-panel";
+import ChatTranscript from "./chat-transcript";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
 import { useAIMode } from "./use-ai-mode";
 import { type AIMode } from "../lib/ai-mode";
@@ -162,7 +163,8 @@ function Workspace({
   const [chrome, setChrome] = useState(true);
   const [captionVisible, setCaptionVisible] = useState(false);
   const [incomingFiles, setIncomingFiles] = useState<File[]>([]);
-  const history = useRef<HTMLDialogElement>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatButton = useRef<HTMLButtonElement>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outputLevel = useTrackVolume(agent.microphoneTrack);
   const microphoneTrack = localParticipant.getTrackPublication(
@@ -187,8 +189,7 @@ function Workspace({
   const [sharedMessages, setSharedMessages] = useState<SharedMessage[]>([]);
   const [hiddenMessages, setHiddenMessages] = useState<Set<string>>(new Set());
   const dialog = useRef<HTMLDialogElement>(null);
-  const transcript = useRef<HTMLDivElement>(null);
-  const composer = useRef<HTMLInputElement>(null);
+  const composer = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const abort = useRef<AbortController | null>(null);
   const lifecycle = useRef(
     new CompanionLifecycle(
@@ -274,7 +275,7 @@ function Workspace({
     if (!inputOpen) return;
     const frame = requestAnimationFrame(() => composer.current?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [inputOpen]);
+  }, [inputOpen, chatOpen]);
   function revealChrome() {
     setChrome(true);
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -303,7 +304,6 @@ function Workspace({
       }
       if (
         dialog.current?.open ||
-        history.current?.open ||
         (event.target instanceof HTMLElement &&
           /INPUT|TEXTAREA|SELECT/.test(event.target.tagName))
       )
@@ -412,10 +412,6 @@ function Workspace({
     };
   }, [session.room]);
 
-  useEffect(() => {
-    const element = transcript.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [messages, sharedMessages]);
 
   useEffect(
     () => () => {
@@ -768,6 +764,7 @@ function Workspace({
       : "");
   return (
     <main
+      data-view={chatOpen ? "chat" : "home"}
       data-theme={selectedMode}
       className={`orb-stage ${chrome ? "chrome-visible" : ""}`}
       onPointerMove={revealChrome}
@@ -790,8 +787,8 @@ function Workspace({
       <header className="workspace-brand"><h1>{assistantName}</h1></header>
       <header className="workspace-header"><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span><button className="icon-button" ref={settingsButton} aria-label="Settings" onClick={() => dialog.current?.showModal()}><Settings2 size={24}/></button></header>
       <nav className="workspace-nav" aria-label="Workspace">
-        <button className="nav-current" aria-label="Voice space" title="Voice space" onClick={() => setInputOpen(false)}><MessageSquare size={23}/></button>
-        <button aria-label="Conversation" title="Conversation" onClick={() => history.current?.showModal()}><AudioLines size={23}/></button>
+        <button className={!chatOpen ? "nav-current" : ""} aria-current={!chatOpen ? "page" : undefined} aria-label="Voice space" title="Voice space" onClick={() => {setChatOpen(false);setInputOpen(false);}}><AudioLines size={23}/></button>
+        <button ref={chatButton} className={chatOpen ? "nav-current" : ""} aria-current={chatOpen ? "page" : undefined} aria-label="Conversation" title="Conversation" onClick={() => {setChatOpen(true);setInputOpen(true);}}><MessageSquare size={23}/></button>
         <button aria-label="Preferences" title="Preferences" onClick={() => dialog.current?.showModal()}><Monitor size={23}/></button>
       </nav>
       <SessionPanel participant={localParticipant} destination={agent.identity} ready={connected && agent.isConnected} mode={ai.status?.mode} microphone={isMicrophoneEnabled} wakeState={wakeState}>
@@ -914,13 +911,27 @@ function Workspace({
         </button>
       </div>
       </div>
+      <section className="chat-view" aria-label="Conversation" hidden={!chatOpen}>
+        <header className="chat-header">
+          <div><span className="section-kicker">TEXT CONVERSATION</span><h2>Conversation</h2></div>
+          <div className="chat-header-actions">
+            <span className="chat-engine">{connected && agent.isConnected ? ai.status?.mode === "local" ? "Unrestricted" : "Normal" : connecting ? "Connecting…" : "Offline"}</span>
+            <button className="icon-button" aria-label={copied ? "Transcript copied" : "Copy transcript"} disabled={!conversation.length} onClick={copyTranscript}>{copied ? <Check size={18}/> : <Copy size={18}/>}</button>
+            <button className="icon-button" aria-label="Close conversation" title="Back to home" onClick={() => {setChatOpen(false);setInputOpen(false);chatButton.current?.focus();}}><X size={20}/></button>
+          </div>
+        </header>
+        <ChatTranscript messages={conversation} pending={connected && agent.state === "thinking"} active={chatOpen}/>
+        {chatOpen && issue && <div className="chat-error" role="alert"><p>{issue}</p><button onClick={() => {setError("");setProviderError("");if(connected || connecting)void end();else void start(true);}}>{connected || connecting ? "End session" : "Retry connection"}</button></div>}
+        {activity.length > 0 && <details className="chat-activity"><summary>Activity · {activity.length}</summary>{activity.map(item=><article key={item.id}><strong>{item.label} · {item.status}</strong><p>{item.detail}</p></article>)}</details>}
+      </section>
       <div
-        className={`input-overlay ${inputOpen ? "input-open" : ""}`}
-        inert={!inputOpen}
-        aria-hidden={!inputOpen}
+        className={`input-overlay ${inputOpen || chatOpen ? "input-open" : ""}`}
+        inert={!inputOpen && !chatOpen}
+        aria-hidden={!inputOpen && !chatOpen}
       >
         <SharingComposer
           key={ai.status?.mode || "connecting"}
+          multiline={chatOpen}
           participant={localParticipant}
           destination={agent.isConnected ? agent.identity : undefined}
           ready={agent.isConnected && !isSending && !providerError && !ai.pending && ai.status?.state!=="loading"}
@@ -936,7 +947,7 @@ function Workspace({
           onError={setError}
           sessionKey={connected}
           incomingFiles={incomingFiles}
-          onSent={() => setInputOpen(false)}
+          onSent={() => {if (!chatOpen) setInputOpen(false);composer.current?.focus();}}
         />
         {!connected && !connecting && (
           <button
@@ -1067,7 +1078,8 @@ function Workspace({
           <button
             onClick={() => {
               dialog.current?.close();
-              history.current?.showModal();
+              setChatOpen(true);
+              setInputOpen(true);
             }}
           >
             Conversation & activity
@@ -1096,65 +1108,6 @@ function Workspace({
           />
           <button type="submit">Save settings</button>
         </form>
-      </dialog>
-      <dialog
-        ref={history}
-        className="glass-dialog history-dialog"
-        aria-labelledby="history-title"
-        onClick={(event) => {
-          if (event.target === history.current) history.current?.close();
-        }}
-      >
-        <header>
-          <h2 id="history-title">Conversation</h2>
-          <div>
-            <button
-              className="icon-button"
-              aria-label={copied ? "Transcript copied" : "Copy transcript"}
-              disabled={!conversation.length}
-              onClick={copyTranscript}
-            >
-              {copied ? <Check size={18} /> : <Copy size={18} />}
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Close conversation"
-              onClick={() => history.current?.close()}
-            >
-              <X size={19} />
-            </button>
-          </div>
-        </header>
-        <div ref={transcript} className="transcript" role="log">
-          {!conversation.length && (
-            <p className="settings-help">Your conversation will appear here.</p>
-          )}
-          {conversation.map((message) => (
-            <article className="message" key={message.id}>
-              <small>{message.isAgent ? assistantName : "You"}</small>
-              <p>{message.message}</p>
-              {message.files.map((file, index) => (
-                <div className="shared-file" key={index}>
-                  {file.preview && <img src={file.preview} alt={file.name} />}
-                  <span>{file.name}</span>
-                </div>
-              ))}
-            </article>
-          ))}
-        </div>
-        {activity.length > 0 && (
-          <details>
-            <summary>Activity</summary>
-            {activity.map((item) => (
-              <article className="message" key={item.id}>
-                <small>
-                  {item.label} · {item.status}
-                </small>
-                <p>{item.detail}</p>
-              </article>
-            ))}
-          </details>
-        )}
       </dialog>
     </main>
   );

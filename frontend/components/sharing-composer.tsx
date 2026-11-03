@@ -31,13 +31,15 @@ export default function SharingComposer({
   sessionKey,
   incomingFiles,
   onSent,
+  multiline = false,
 }: {
   participant: LocalParticipant;
   destination?: string;
   ready: boolean;
   draft: string;
   setDraft: (text: string) => void;
-  inputRef: RefObject<HTMLInputElement | null>;
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  multiline?: boolean;
   onText: (text: string) => Promise<void>;
   onShared: (message: SharedMessage) => void;
   onError: (text: string) => void;
@@ -171,6 +173,14 @@ export default function SharingComposer({
       }
     }
   }
+  useEffect(() => {
+    if (multiline && !busy && !uncertain) inputRef.current?.focus();
+  }, [busy, uncertain, multiline, inputRef]);
+  useEffect(() => {
+    if (!multiline || !(inputRef.current instanceof HTMLTextAreaElement)) return;
+    inputRef.current.style.height = "auto";
+    inputRef.current.style.height = `${Math.min(180, inputRef.current.scrollHeight)}px`;
+  }, [draft, multiline, inputRef]);
   return (
     <div
       className={`sharing-composer ${dragging ? "drop-active" : ""}`}
@@ -257,24 +267,19 @@ export default function SharingComposer({
         >
           <Paperclip size={18} />
         </button>
-        <input
-          ref={inputRef}
-          value={draft}
-          disabled={busy || uncertain}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            if (!batch.current?.committing) batch.current = null;
-          }}
-          placeholder={
-            files.length
-              ? "Ask about your attachments…"
-              : ready
-                ? "Or type a message…"
-                : "Enter a message…"
-          }
-          aria-label={`Message ${assistantName}`}
-          maxLength={4000}
-        />
+        {multiline ? <textarea
+          ref={inputRef as RefObject<HTMLTextAreaElement | null>}
+          value={draft} rows={1} disabled={busy || uncertain}
+          onChange={event => {setDraft(event.target.value);if(!batch.current?.committing)batch.current=null;}}
+          onKeyDown={event => {if(event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing){event.preventDefault();void submit();}}}
+          placeholder={`Message ${assistantName}…`} aria-label={`Message ${assistantName}`} maxLength={4000}
+        /> : <input
+          ref={inputRef as RefObject<HTMLInputElement | null>}
+          value={draft} disabled={busy || uncertain}
+          onChange={event => {setDraft(event.target.value);if(!batch.current?.committing)batch.current=null;}}
+          placeholder={files.length ? "Ask about your attachments…" : ready ? "Or type a message…" : "Enter a message…"}
+          aria-label={`Message ${assistantName}`} maxLength={4000}
+        />}
         <button
           aria-label={uncertain ? "Retry attachment receipt" : "Send message"}
           disabled={!ready || (!draft.trim() && !files.length) || busy}
@@ -289,7 +294,7 @@ export default function SharingComposer({
       <div className="composer-hint">
         {uncertain
           ? "Retry checks the original send · end the session to reset"
-          : "Paste or drop pictures & files · up to 3 files, 10 MB each"}
+          : multiline ? "Enter to send · Shift + Enter for a new line" : "Paste or drop pictures & files · up to 3 files, 10 MB each"}
       </div>
     </div>
   );
