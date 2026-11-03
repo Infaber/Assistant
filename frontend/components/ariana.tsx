@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RoomAudioRenderer,
   SessionProvider,
@@ -24,6 +24,10 @@ import {
   type DataPacket_Kind,
 } from "livekit-client";
 import {
+  ArrowUpRight,
+  AudioLines,
+  MessageSquare,
+  ShieldCheck,
   Check,
   Copy,
   Mic,
@@ -34,6 +38,10 @@ import {
   X,
 } from "lucide-react";
 import { assistantName } from "../lib/persona";
+import IPhoneControls from "./iphone-controls";
+import PhonePairing from "./phone-pairing";
+import SessionPanel from "./session-panel";
+import ChatTranscript from "./chat-transcript";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
 import { useAIMode } from "./use-ai-mode";
 import { type AIMode } from "../lib/ai-mode";
@@ -43,8 +51,11 @@ import {
   CompanionLifecycle,
   terminalConnectionError,
 } from "../lib/companion-lifecycle";
+import { WakeConversation, waitForWakeReady, publishWakeMicrophone } from "../lib/wake-conversation";
 import { desktopConfig } from "../lib/desktop";
 import SharingComposer, { type SharedMessage } from "./sharing-composer";
+import WakeControls from "./wake-controls";
+import VoiceControls from "./voice-controls";
 import CheckInControls from "./check-in-controls";
 import {
   hasRunningAction,
@@ -75,6 +86,7 @@ export default function Ariana() {
   function confirmMode(mode: AIMode) {requestMode(mode);try {localStorage.setItem("ariana-ai-mode",mode);} catch {}}
 
   const accessCode = useRef(desktopConfig()?.accessCode || "");
+  const applyPhoneCode = useCallback((code:string)=>{accessCode.current=code;},[]);
   const credentials = useRef({ serverUrl: "", participantToken: "" });
   const [ready] = useState(() => {
     let resolve!: () => void;
@@ -96,7 +108,7 @@ export default function Ariana() {
   async function prepare(signal: AbortSignal) {
     const response = await fetch("/api/connection", {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessCode.current}`, "Content-Type":"application/json" },
+      headers: { ...(accessCode.current ? {Authorization: `Bearer ${accessCode.current}`} : {}), "Content-Type":"application/json" },
       body: JSON.stringify({mode:modeRef.current}),
       signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
     });
@@ -125,6 +137,7 @@ export default function Ariana() {
           accessCode.current = code.trim();
         }}
       />
+      <PhonePairing onCode={applyPhoneCode}/>
       <RoomAudioRenderer />
     </SessionProvider>
   );
@@ -146,6 +159,7 @@ function Workspace({
   const { messages, send, isSending } = useSessionMessages(session);
   const { localParticipant, isMicrophoneEnabled, isScreenShareEnabled } =
     useLocalParticipant();
+  const [carryContext, setCarryContext] = useState(false);
   const [inputOpen, setInputOpen] = useState(false);
   const [orbStyle, setOrbStyle] = useState(0);
   const [captions, setCaptions] = useState(false);
@@ -153,7 +167,8 @@ function Workspace({
   const [chrome, setChrome] = useState(true);
   const [captionVisible, setCaptionVisible] = useState(false);
   const [incomingFiles, setIncomingFiles] = useState<File[]>([]);
-  const history = useRef<HTMLDialogElement>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatButton = useRef<HTMLButtonElement>(null);
   const fadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outputLevel = useTrackVolume(agent.microphoneTrack);
   const microphoneTrack = localParticipant.getTrackPublication(
@@ -178,8 +193,7 @@ function Workspace({
   const [sharedMessages, setSharedMessages] = useState<SharedMessage[]>([]);
   const [hiddenMessages, setHiddenMessages] = useState<Set<string>>(new Set());
   const dialog = useRef<HTMLDialogElement>(null);
-  const transcript = useRef<HTMLDivElement>(null);
-  const composer = useRef<HTMLInputElement>(null);
+  const composer = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const abort = useRef<AbortController | null>(null);
   const lifecycle = useRef(
     new CompanionLifecycle(
@@ -206,7 +220,16 @@ function Workspace({
   const startLatest = useRef<(asText?: boolean) => Promise<void>>(
     async () => {},
   );
-  const wakeUntil = useRef(0);
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const wakeConversation = useRef(new WakeConversation());
+  const wakeActivity = useRef(false);
+  const [listeningCues, setListeningCues] = useState("subtle");
+  useEffect(()=>{const apply=(event?:Event)=>{const value=(event as CustomEvent<string>|undefined)?.detail || localStorage.getItem("ariana.listening-cues") || "subtle";if(["off","subtle","expressive"].includes(value))setListeningCues(value);};try{apply();}catch{}window.addEventListener("ariana:listening-cues",apply);return()=>window.removeEventListener("ariana:listening-cues",apply);},[]);
+  const [wakeState, setWakeState] = useState("Standby");
+  const voiceDiagnostics = useRef<{stage:string; milliseconds:number}[]>([]);
+  const recordVoiceTiming = (stage:string, started:number) => {
+    voiceDiagnostics.current = [...voiceDiagnostics.current.slice(-49), {stage, milliseconds: Math.round(performance.now()-started)}];
+  };
   const connected = session.isConnected;
   agentReady.current = connected && agent.isConnected;
   const connecting =
@@ -228,30 +251,35 @@ function Workspace({
     })),
     ...sharedMessages.map((message) => ({ ...message, isAgent: false })),
   ].sort((a, b) => a.timestamp - b.timestamp);
-  const status = providerError
+  const status = wakeState === "Activating" ? "Activating" : providerError
     ? "Connection needs attention"
     : reconnecting
       ? "Reconnecting"
       : !connected
         ? connecting
           ? "Connecting"
-          : "Ready when you are"
+          : "Standby"
         : agent.state === "failed"
           ? "Agent unavailable"
           : agent.state === "speaking"
-            ? `${assistantName} is speaking`
+            ? "Speaking"
             : agent.state === "thinking"
-              ? "Thinking it through"
+              ? "Thinking"
               : !agent.isConnected
                 ? `Finding ${assistantName}`
                 : isMicrophoneEnabled
-                  ? "Listening to you"
-                  : "Ready for your message";
+                  ? "Listening"
+                  : "Ready";
 
   function revealInput() {
     setInputOpen(true);
-    requestAnimationFrame(() => composer.current?.focus());
+    if (inputOpen) composer.current?.focus();
   }
+  useEffect(() => {
+    if (!inputOpen) return;
+    const frame = requestAnimationFrame(() => composer.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [inputOpen, chatOpen]);
   function revealChrome() {
     setChrome(true);
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -279,8 +307,7 @@ function Workspace({
         return;
       }
       if (
-        dialog.current?.open ||
-        history.current?.open ||
+        document.querySelector("dialog[open]") ||
         (event.target instanceof HTMLElement &&
           /INPUT|TEXTAREA|SELECT/.test(event.target.tagName))
       )
@@ -389,10 +416,6 @@ function Workspace({
     };
   }, [session.room]);
 
-  useEffect(() => {
-    const element = transcript.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [messages, sharedMessages]);
 
   useEffect(
     () => () => {
@@ -500,12 +523,30 @@ function Workspace({
         return;
       savePaused(false);
       lifecycle.current.resume();
-      wakeUntil.current = Date.now() + 15000;
+      const token = wakeConversation.current.begin(performance.now());
+      if (token === null) return;
+      const started = performance.now();
+      setWakeState("Activating");
       try {
-        if (session.room.state === ConnectionState.Connected)
+        if (session.room.state !== ConnectionState.Connected) await startLatest.current(true);
+        const ready = await waitForWakeReady(wakeConversation.current, token, ()=>agentReady.current, ()=>performance.now(), ()=>new Promise(resolve=>window.setTimeout(resolve,100)), 90000);
+        if (!ready) {
+          if (!wakeConversation.current.isPending(token)) return;
+          throw new Error("The voice agent did not become ready. Capture remains muted.");
+        }
+        setMediaBusy(true);
+        const published = await publishWakeMicrophone(wakeConversation.current, token, ()=>performance.now(), async()=>{
+          if (session.room.state!==ConnectionState.Connected) throw new Error("Voice connection ended before capture was ready.");
           await localParticipant.setMicrophoneEnabled(true);
-        else await startLatest.current(false);
+          if (!localParticipant.isMicrophoneEnabled) throw new Error("Voice capture did not become ready.");
+        }, async()=>{await localParticipant.setMicrophoneEnabled(false);}).finally(() => setMediaBusy(false));
+        if (!published) return;
+        recordVoiceTiming("wake_event_to_microphone_ready", started);
+        setWakeState("Listening");
       } catch (err) {
+        if (lifecycle.current.sleeping || lifecycle.current.paused) return;
+        wakeConversation.current.cancel();
+        setWakeState("Muted");
         setError(friendlyError(err));
         lifecycle.current.terminal = true;
       }
@@ -568,6 +609,8 @@ function Workspace({
     ? "paused"
     : providerError || lifecycle.current.terminal || !lifecycle.current.online
       ? "offline"
+      : wakeState === "Activating"
+        ? "connecting"
       : reconnecting
         ? "recovering"
         : connecting
@@ -598,26 +641,75 @@ function Workspace({
     return () => window.removeEventListener("ariana:heartbeat", notify);
   }, [desktopState, isMicrophoneEnabled, outputActive]);
 
+  wakeActivity.current = localParticipant.isSpeaking || inputLevel > 0.025 || agent.state === "thinking" || outputActive;
   useEffect(() => {
-    if (!desktopConfig() || !isMicrophoneEnabled || !wakeUntil.current) return;
-    if (
-      inputLevel > 0.06 ||
-      agent.state === "thinking" ||
-      agent.state === "speaking"
-    )
-      wakeUntil.current = Date.now() + 15000;
+    if (!desktopConfig()) return;
     const timer = window.setInterval(() => {
-      if (wakeUntil.current && Date.now() > wakeUntil.current) {
-        wakeUntil.current = 0;
-        void localParticipant
-          .setMicrophoneEnabled(false)
-          .catch((err) => setError(friendlyError(err)));
+      if (!isMicrophoneEnabled) { if (!wakeConversation.current.pending) wakeConversation.current.cancel(); return; }
+      if (wakeConversation.current.due(performance.now(), wakeActivity.current)) {
+        wakeConversation.current.cancel();
+        setWakeState("Returning to standby");
+        void localParticipant.setMicrophoneEnabled(false).then(()=>setWakeState("Standby")).catch(err=>{setWakeState("Microphone error");setError(friendlyError(err));});
       }
-    }, 1000);
+    }, 500);
     return () => window.clearInterval(timer);
-  }, [inputLevel, agent.state, isMicrophoneEnabled, localParticipant]);
+  }, [isMicrophoneEnabled, localParticipant]);
+
+  useEffect(() => {
+    const cancel = () => { wakeConversation.current.cancel(); setWakeState("Standby"); };
+    const standby = () => {
+      cancel();
+      void localParticipant.setMicrophoneEnabled(false).then(()=>setWakeState("Standby")).catch(err=>setError(friendlyError(err)));
+    };
+    for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.addEventListener(name, standby);
+    const consent = (event: Event) => {
+      if ((event as CustomEvent).detail?.enabled === false && wakeConversation.current.pending) standby();
+    };
+    window.addEventListener("ariana:wake-status", consent);
+    window.addEventListener("ariana:standby", standby);
+    return () => {
+      for (const name of ["ariana:pause", "ariana:sleep", "ariana:offline"]) window.removeEventListener(name, standby);
+      window.removeEventListener("ariana:standby", standby);
+      window.removeEventListener("ariana:wake-status", consent);
+      cancel();
+    };
+  }, [localParticipant]);
+
+  useEffect(() => {
+    const standby = (data:Uint8Array, participant?:RemoteParticipant, _kind?:DataPacket_Kind, topic?:string) => {
+      if (topic!=="ariana.conversation" || participant?.kind!==ParticipantKind.AGENT || participant.identity!==agent.identity) return;
+      try { if (JSON.parse(new TextDecoder().decode(data)).action==="standby") window.dispatchEvent(new Event("ariana:standby")); } catch {}
+    };
+    session.room.on(RoomEvent.DataReceived, standby);
+    return ()=>{session.room.off(RoomEvent.DataReceived, standby);};
+  }, [session.room, agent.identity]);
+
+  useEffect(() => {
+    if (!providerError && !reconnecting) return;
+    wakeConversation.current.cancel();
+    setWakeState("Muted");
+    void localParticipant.setMicrophoneEnabled(false).catch(()=>{});
+  }, [providerError, reconnecting, localParticipant]);
+
+  useEffect(() => {
+    let disposed = false;
+    let permission: PermissionStatus | undefined;
+    const changed = () => {
+      if (permission?.state === "denied") {
+        window.dispatchEvent(new Event("ariana:standby"));
+        setError("Microphone permission was denied. Allow microphone access in your browser or Mac settings, then explicitly unmute; text remains available.");
+      }
+    };
+    void navigator.permissions?.query({name: "microphone" as PermissionName}).then(value => {
+      if (disposed) return;
+      permission = value;
+      permission.addEventListener("change", changed);
+    }).catch(() => {});
+    return () => { disposed = true; permission?.removeEventListener("change", changed); };
+  }, []);
 
   async function end() {
+    wakeConversation.current.cancel();
     lifecycle.current.paused = true;
     savePaused(true);
     abort.current?.abort();
@@ -676,6 +768,8 @@ function Workspace({
       : "");
   return (
     <main
+      data-view={chatOpen ? "chat" : "home"}
+      data-theme={selectedMode}
       className={`orb-stage ${chrome ? "chrome-visible" : ""}`}
       onPointerMove={revealChrome}
       onPointerDown={revealChrome}
@@ -694,16 +788,27 @@ function Workspace({
         }
       }}
     >
-      <h1 className="sr-only">{assistantName}</h1>
-      <div className="ai-mode-control" aria-label="AI mode">
+      <header className="workspace-brand"><h1>{assistantName}</h1></header>
+      <header className="workspace-header"><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span><button className="icon-button" ref={settingsButton} aria-label="Settings" onClick={() => dialog.current?.showModal()}><Settings2 size={24}/></button></header>
+      <nav className="workspace-nav" aria-label="Workspace">
+        <button className={!chatOpen ? "nav-current" : ""} aria-current={!chatOpen ? "page" : undefined} aria-label="Voice space" title="Voice space" onClick={() => {setChatOpen(false);setInputOpen(false);}}><AudioLines size={23}/></button>
+        <button ref={chatButton} className={chatOpen ? "nav-current" : ""} aria-current={chatOpen ? "page" : undefined} aria-label="Conversation" title="Conversation" onClick={() => {setChatOpen(true);setInputOpen(true);}}><MessageSquare size={23}/></button>
+        <button aria-label="Preferences" title="Preferences" onClick={() => dialog.current?.showModal()}><Monitor size={23}/></button>
+      </nav>
+      <SessionPanel participant={localParticipant} destination={agent.identity} ready={connected && agent.isConnected} mode={ai.status?.mode} microphone={isMicrophoneEnabled} wakeState={wakeState}>
+      <div className="ai-mode-control" aria-label="AI mode"><span className="section-kicker">ENGINE</span>
         <div className="ai-mode-segments">
-          <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal")}>Normal</button>
-          <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local")}>Unrestricted</button>
+          <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal", carryContext).finally(()=>setCarryContext(false))}>Normal</button>
+          <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local", carryContext).finally(()=>setCarryContext(false))}>Unrestricted</button>
         </div>
         <p role="status">{ai.pending || ai.status?.state==="loading" ? `Loading selected engine… · active: ${ai.status?.mode==="local" ? "Local AI" : "Gemini Live"}` : ai.status ? `${ai.status.mode==="local" ? "Local AI" : "Gemini Live"} · ${ai.status.model}${ai.status.state==="error" ? " · check connection" : ""}` : `Selected: ${selectedMode==="local" ? "Local AI" : "Gemini Live"} · ${connecting ? "Connecting…" : "Connect to start"}`}</p>
         {ai.error && <p role="alert" className="mode-error">{ai.error}</p>}
-        <details><summary>Mode privacy</summary>Switching starts fresh conversation context and discards staged attachments. Saved memories are shared; Normal Mode sends relevant memories to Gemini. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
+        <label><input type="checkbox" checked={carryContext} disabled={ai.pending} onChange={event=>setCarryContext(event.target.checked)} /> Keep recent conversation for the next switch</label>
+        <details><summary>Mode privacy</summary>Conversation transfer is off by default. Enabling it shares up to 24 recent text messages with the selected engine, including Gemini when switching to Normal. Images, attachments, tool results and pending approvals are excluded. Staged attachments are discarded. Saved memories are shared and retrieved when relevant. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
       </div>
+      </SessionPanel>
+      <section className="voice-space" aria-label="Voice space">
+      {listeningCues!=="off" && connected && isMicrophoneEnabled && !outputActive && inputLevel>0.025 && <div className={`listening-cue ${listeningCues}`} role="status" style={{opacity:Math.min(1,0.45+inputLevel)}}>Listening</div>}
       <div className="orb-center">
         <button
           className="orb-touch"
@@ -722,6 +827,7 @@ function Workspace({
         >
           <ArianaOrb
             mode={ai.status?.mode || "normal"}
+            theme={selectedMode}
             style={orbStyle}
             state={orbState}
             level={
@@ -740,47 +846,15 @@ function Workspace({
           {lastCaption}
         </p>
       </div>
-      <p className="sr-only" role="status">
-        {status}
-      </p>
-      <div className="quiet-controls">
-        <button
-          className="icon-button"
-          disabled={mediaBusy || connecting}
-          aria-label={
-            connected
-              ? isMicrophoneEnabled
-                ? "Mute microphone"
-                : "Unmute microphone"
-              : "Start conversation"
-          }
-          aria-pressed={connected && isMicrophoneEnabled}
-          onClick={() => {
-            if (!connected) void start();
-            else
-              void media(() =>
-                localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled),
-              );
-          }}
-        >
-          {connected && isMicrophoneEnabled ? (
-            <Mic size={19} />
-          ) : (
-            <MicOff size={19} />
-          )}
-        </button>
-        <button
-          className="icon-button"
-          aria-label="Settings"
-          onClick={() => dialog.current?.showModal()}
-        >
-          <Settings2 size={19} />
-        </button>
-      </div>
+      <section className="conversation-status" aria-label="Conversation state" aria-live="polite">
+        <h2>{issue ? (/permission|denied|allow microphone/i.test(issue) ? "Microphone denied" : "Error") : status}</h2>
+        <p>{wakeState === "Activating" ? "Wait for Listening, then say your command." : isMicrophoneEnabled ? "Take your time." : "Conversation microphone is off. Type, or turn it on to talk."}</p>
+        {wakeState === "Activating" && <button onClick={() => window.dispatchEvent(new Event("ariana:standby"))}>Cancel activation</button>}
+      </section>
       <StartAudio label={`Enable ${assistantName}’s audio`} className="enable-audio" />
       {issue && (
         <div className="error-banner" role="alert">
-          <p>{issue}</p>
+          <p tabIndex={0} aria-label="Error details">{issue}</p>
           <button
             onClick={() => {
               setError("");
@@ -802,13 +876,66 @@ function Workspace({
           </button>
         </div>
       )}
+      </section>
+      <section className="conversation-preview" aria-label="Recent conversation" aria-live="polite" aria-relevant="additions text">
+        <span className="section-kicker">LAST RESPONSE</span>
+        {conversation.filter(message => message.isAgent).slice(-1).map(message => <article key={message.id}><p>{message.message}</p></article>)}
+        {!conversation.some(message => message.isAgent) && <p className="response-placeholder">A little space to think together.</p>}
+      </section>
+      <div className="composer-dock">
+      <button className={`message-launcher ${inputOpen ? "launcher-hidden" : ""}`} onClick={revealInput}><span>Ask {assistantName} anything</span><kbd>⌘ K</kbd></button>
+      <div className="quiet-controls">
+        <button
+          className="icon-button primary-voice-action"
+          disabled={mediaBusy || connecting || wakeState === "Activating"}
+          aria-label={
+            connected
+              ? isMicrophoneEnabled
+                ? "Mute microphone"
+                : "Unmute microphone"
+              : "Start conversation"
+          }
+          aria-pressed={connected && isMicrophoneEnabled}
+          onClick={() => {
+            wakeConversation.current.cancel();
+            setWakeState("Standby");
+            if (!connected) void start();
+            else
+              void media(() =>
+                localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled),
+              );
+          }}
+        >
+          {connected && isMicrophoneEnabled ? (
+            <Mic size={19} />
+          ) : (
+            <MicOff size={19} />
+          )}
+          <span>{connected ? isMicrophoneEnabled ? "Mute microphone" : "Resume listening" : "Start conversation"}</span>
+        </button>
+      </div>
+      </div>
+      <section className="chat-view" aria-label="Conversation" hidden={!chatOpen}>
+        <header className="chat-header">
+          <div><span className="section-kicker">TEXT CONVERSATION</span><h2>Conversation</h2></div>
+          <div className="chat-header-actions">
+            <span className="chat-engine">{connected && agent.isConnected ? ai.status?.mode === "local" ? "Unrestricted" : "Normal" : connecting ? "Connecting…" : "Offline"}</span>
+            <button className="icon-button" aria-label={copied ? "Transcript copied" : "Copy transcript"} disabled={!conversation.length} onClick={copyTranscript}>{copied ? <Check size={18}/> : <Copy size={18}/>}</button>
+            <button className="icon-button" aria-label="Close conversation" title="Back to home" onClick={() => {setChatOpen(false);setInputOpen(false);chatButton.current?.focus();}}><X size={20}/></button>
+          </div>
+        </header>
+        <ChatTranscript messages={conversation} pending={connected && agent.state === "thinking"} active={chatOpen}/>
+        {chatOpen && issue && <div className="chat-error" role="alert"><p>{issue}</p><button onClick={() => {setError("");setProviderError("");if(connected || connecting)void end();else void start(true);}}>{connected || connecting ? "End session" : "Retry connection"}</button></div>}
+        {activity.length > 0 && <details className="chat-activity"><summary>Activity · {activity.length}</summary>{activity.map(item=><article key={item.id}><strong>{item.label} · {item.status}</strong><p>{item.detail}</p></article>)}</details>}
+      </section>
       <div
-        className={`input-overlay ${inputOpen ? "input-open" : ""}`}
-        inert={!inputOpen}
-        aria-hidden={!inputOpen}
+        className={`input-overlay ${inputOpen || chatOpen ? "input-open" : ""}`}
+        inert={!inputOpen && !chatOpen}
+        aria-hidden={!inputOpen && !chatOpen}
       >
         <SharingComposer
           key={ai.status?.mode || "connecting"}
+          multiline={chatOpen}
           participant={localParticipant}
           destination={agent.isConnected ? agent.identity : undefined}
           ready={agent.isConnected && !isSending && !providerError && !ai.pending && ai.status?.state!=="loading"}
@@ -824,7 +951,7 @@ function Workspace({
           onError={setError}
           sessionKey={connected}
           incomingFiles={incomingFiles}
-          onSent={() => setInputOpen(false)}
+          onSent={() => {if (!chatOpen) setInputOpen(false);composer.current?.focus();}}
         />
         {!connected && !connecting && (
           <button
@@ -848,12 +975,13 @@ function Workspace({
         ref={dialog}
         className="glass-dialog settings-dialog"
         aria-labelledby="settings-title"
+        onClose={() => settingsButton.current?.focus()}
         onClick={(event) => {
           if (event.target === dialog.current) dialog.current?.close();
         }}
       >
         <header>
-          <h2 id="settings-title">{assistantName}</h2>
+          <div className="settings-heading"><span className="section-kicker">MAKE IT YOURS</span><h2 id="settings-title">Preferences</h2></div>
           <button
             className="icon-button"
             aria-label="Close settings"
@@ -862,7 +990,12 @@ function Workspace({
             <X size={19} />
           </button>
         </header>
-        <fieldset className="appearance">
+        <nav className="settings-index" aria-label="Settings sections">
+          {[['voice-section','Voice & microphone'],['appearance-section','Appearance'],['session-section','Session'],['iphone-section','iPhone']].map(([id,label]) => <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({block:'start'})}>{label}<ArrowUpRight size={13}/></button>)}
+        </nav>
+        <div id="voice-section"><WakeControls /></div>
+        <VoiceControls participant={localParticipant} destination={agent.identity} ready={connected&&agent.isConnected} busy={agent.state==="speaking"||agent.state==="thinking"||inputLevel>0.025} onStandby={()=>window.dispatchEvent(new Event("ariana:standby"))} wakeState={wakeConversation.current.active?desktopState:wakeState} localTimings={()=>voiceDiagnostics.current} />
+        <fieldset className="appearance" id="appearance-section">
           <legend>Appearance</legend>
           <div className="style-picker">
             {orbStyles.map((name, index) => (
@@ -902,7 +1035,7 @@ function Workspace({
           Tap {assistantName} to begin. Tap again, type, or press ⌘K to write. Paste or
           drop pictures and files.
         </p>
-        <div className="session-settings">
+        <div className="session-settings" id="session-section">
           <span>{status}</span>
           {connected || connecting ? (
             <button
@@ -949,12 +1082,14 @@ function Workspace({
           <button
             onClick={() => {
               dialog.current?.close();
-              history.current?.showModal();
+              setChatOpen(true);
+              setInputOpen(true);
             }}
           >
             Conversation & activity
           </button>
         </div>
+        <IPhoneControls/>
         <CheckInControls
           participant={localParticipant}
           destination={agent.isConnected ? agent.identity : undefined}
@@ -978,65 +1113,6 @@ function Workspace({
           />
           <button type="submit">Save settings</button>
         </form>
-      </dialog>
-      <dialog
-        ref={history}
-        className="glass-dialog history-dialog"
-        aria-labelledby="history-title"
-        onClick={(event) => {
-          if (event.target === history.current) history.current?.close();
-        }}
-      >
-        <header>
-          <h2 id="history-title">Conversation</h2>
-          <div>
-            <button
-              className="icon-button"
-              aria-label={copied ? "Transcript copied" : "Copy transcript"}
-              disabled={!conversation.length}
-              onClick={copyTranscript}
-            >
-              {copied ? <Check size={18} /> : <Copy size={18} />}
-            </button>
-            <button
-              className="icon-button"
-              aria-label="Close conversation"
-              onClick={() => history.current?.close()}
-            >
-              <X size={19} />
-            </button>
-          </div>
-        </header>
-        <div ref={transcript} className="transcript" role="log">
-          {!conversation.length && (
-            <p className="settings-help">Your conversation will appear here.</p>
-          )}
-          {conversation.map((message) => (
-            <article className="message" key={message.id}>
-              <small>{message.isAgent ? assistantName : "You"}</small>
-              <p>{message.message}</p>
-              {message.files.map((file, index) => (
-                <div className="shared-file" key={index}>
-                  {file.preview && <img src={file.preview} alt={file.name} />}
-                  <span>{file.name}</span>
-                </div>
-              ))}
-            </article>
-          ))}
-        </div>
-        {activity.length > 0 && (
-          <details>
-            <summary>Activity</summary>
-            {activity.map((item) => (
-              <article className="message" key={item.id}>
-                <small>
-                  {item.label} · {item.status}
-                </small>
-                <p>{item.detail}</p>
-              </article>
-            ))}
-          </details>
-        )}
       </dialog>
     </main>
   );

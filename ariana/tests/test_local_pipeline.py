@@ -360,3 +360,80 @@ async def test_failed_router_warmup_cancels_other_engines(monkeypatch):
     with pytest.raises(RuntimeError, match="Router unavailable"):
         await prewarm_local(agent)
     assert len(stopped) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("speed", ["0.8", "1.0", "1.2"])
+async def test_local_rate_reaches_synthesis_and_is_bounded(monkeypatch, speed):
+    import threading
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from local_speech import LocalTTS
+
+    seen = []
+
+    def generate(text, **kwargs):
+        seen.append(kwargs["speed"])
+        kwargs["callback"](np.zeros(2400), 1.0)
+
+    monkeypatch.setattr(
+        "local_speech.engines",
+        lambda: (
+            None,
+            SimpleNamespace(generate=generate),
+            threading.Lock(),
+            threading.Lock(),
+        ),
+    )
+    async with LocalTTS(speed=speed).synthesize("Hello") as stream:
+        async for _ in stream:
+            pass
+    assert seen == [float(speed)]
+    for invalid in ["nan", "inf", "0", "9", True]:
+        with pytest.raises(ValueError):
+            LocalTTS(speed=invalid)
+
+
+@pytest.mark.asyncio
+async def test_canceled_local_synthesis_drops_late_output_and_yields_to_new_turn(
+    monkeypatch,
+):
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from local_speech import LocalTTS
+
+    released = threading.Event()
+    stopped = threading.Event()
+    callbacks = []
+
+    def generate(text, *, sid, speed, callback):
+        if text == "old":
+            callback(np.zeros(2400), 0.5)
+            assert released.wait(3)
+            callbacks.append(callback(np.zeros(2400), 1.0))
+            stopped.set()
+        else:
+            callbacks.append(callback(np.zeros(2400), 1.0))
+
+    monkeypatch.setattr("local_speech.engines", lambda: engines)
+    engines = (
+        None,
+        SimpleNamespace(generate=generate),
+        threading.Lock(),
+        threading.Lock(),
+    )
+    stream = LocalTTS().synthesize("old")
+    await asyncio.wait_for(anext(stream), 2)
+    await stream.aclose()
+    released.set()
+    assert await asyncio.to_thread(stopped.wait, 3)
+    async with LocalTTS().synthesize("new") as newest:
+        frames = [event async for event in newest]
+    assert callbacks == [0, 1]
+    assert frames

@@ -1,27 +1,10 @@
+import { allowedOrigin, hasAccessCode, loopbackHosts } from './connection-security';
 import { preflightLocal } from './local-preflight';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { AccessToken, RoomAgentDispatch, RoomConfiguration, TrackSource } from 'livekit-server-sdk';
 
 type Environment = Record<string, string | undefined>;
 const headers = { 'Cache-Control': 'no-store' };
-const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
-
-function allowedOrigin(request: Request, env: Environment) {
-  const origin = request.headers.get('origin');
-  const expected = env.APP_ORIGIN || new URL(request.url).origin;
-  if (!origin) return false;
-  if (origin === expected) return true;
-  // Next dev can reconstruct request.url with localhost even when the browser
-  // uses 127.0.0.1. Allow loopback aliases only in development, on the same port.
-  if (env.APP_ORIGIN || env.NODE_ENV !== 'development') return false;
-  try {
-    const actual = new URL(origin);
-    const target = new URL(expected);
-    return actual.origin === origin && loopbackHosts.has(actual.hostname)
-      && loopbackHosts.has(target.hostname) && actual.protocol === target.protocol
-      && actual.port === target.port;
-  } catch { return false; }
-}
 
 function error(message: string, status: number) {
   return Response.json({ error: message }, { status, headers });
@@ -38,9 +21,7 @@ export async function createConnection(request: Request, env: Environment = proc
     return error('Set ARIANA_ACCESS_CODE on the frontend server before connecting.', 503);
   }
   if (code) {
-    const supplied = request.headers.get('authorization')?.replace(/^Bearer /, '') || '';
-    const digest = (value: string) => createHash('sha256').update(value).digest();
-    if (!timingSafeEqual(digest(supplied), digest(code))) {
+    if (!hasAccessCode(request, code, env)) {
       return error('Enter the correct access code in Connection settings.', 401);
     }
   }

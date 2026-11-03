@@ -15,7 +15,13 @@ def test_monotonic_measurement_records_failed_work_without_swallowing_error():
     with pytest.raises(TimeoutError), performance.measure("local_router"):
         raise TimeoutError("private payload")
     assert performance.summary() == {
-        "local_router": {"samples": 1, "mean_ms": 125.0, "max_ms": 125.0}
+        "local_router": {
+            "samples": 1,
+            "mean_ms": 125.0,
+            "max_ms": 125.0,
+            "median_ms": 125.0,
+            "p95_ms": 125.0,
+        }
     }
     assert "private" not in json.dumps(list(performance.samples))
 
@@ -108,3 +114,52 @@ async def test_sdk_tool_timing_handles_parallel_end_and_cancel_without_payload(c
         {"stage": "tool_execution", "milliseconds": 3000},
     ]
     assert "private" not in caplog.text and "secret" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_real_sdk_state_timings_measure_events_without_claiming_acoustic_latency():
+    from livekit.agents.voice.events import (
+        AgentStateChangedEvent,
+        UserStateChangedEvent,
+    )
+
+    ticks = iter([1, 2, 2.4, 3, 3.08])
+    session = AgentSession(
+        userdata={"_performance": Performance(clock=lambda: next(ticks))}
+    )
+    metrics = install_performance(session)
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="listening", new_state="speaking"),
+    )
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="speaking", new_state="listening"),
+    )
+    session.emit(
+        "agent_state_changed",
+        AgentStateChangedEvent(old_state="thinking", new_state="speaking"),
+    )
+    session.emit(
+        "user_state_changed",
+        UserStateChangedEvent(old_state="listening", new_state="speaking"),
+    )
+    session.emit(
+        "agent_state_changed",
+        AgentStateChangedEvent(old_state="speaking", new_state="listening"),
+    )
+    summary = metrics.summary()
+    assert summary["sdk_user_end_to_speaking_state"]["mean_ms"] == 400
+    assert summary["sdk_overlap_to_speaking_state_stop"]["mean_ms"] == 80
+    assert "first_audible_audio" not in summary
+
+
+def test_latency_percentiles_use_bounded_samples_and_nearest_rank_p95():
+    performance = Performance()
+    assert performance.summary() == {}
+    for milliseconds in range(1, 21):
+        performance.record("e2e_latency", milliseconds / 1000)
+    summary = performance.summary()["e2e_latency"]
+    assert summary["median_ms"] == 10.5
+    assert summary["p95_ms"] == 19
+    assert summary["samples"] == 20

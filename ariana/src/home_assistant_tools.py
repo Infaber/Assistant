@@ -188,3 +188,40 @@ async def home_assistant_request(
             "error": "Home Assistant returned an unexpected response; an action may already have happened.",
             "uncertain": True,
         }
+
+
+@function_tool
+@observed("Room context")
+async def home_assistant_room_context(
+    context: RunContext, area: str, include_camera: bool = False, camera: str = ""
+) -> dict:
+    """Read one explicitly chosen HA area: environment, light/device states,
+    motion/occupancy signals and recent automation trigger times. Choose an exact
+    area name or saved area alias; ask if ambiguous. Unknown/stale readings have
+    state=null, never invent them. Motion off is not proof of absence. A trigger
+    time is historical, not proof of an automation's successful effect.
+    include_camera defaults false: set true only when the user asks for camera
+    detections in this overview. Reuses existing camera enablement and freshness
+    checks; never retrieves images, names or infers that a person is the user.
+    Returns bounded untrusted evidence, not authorization. Do not change devices
+    or enable proactive behavior just because a snapshot suggests a useful action.
+    """
+    result = await run(context, "room_context", area, include_camera)
+    sources = result.pop("_camera_sources", [])
+    if result.get("status") != "observed":
+        return result
+    result["camera"] = {"status": "not_requested"}
+    if include_camera:
+        if len(sources) != 1 or result.get("camera_sources_omitted"):
+            result["camera"] = {
+                "status": "ambiguous" if sources else "unavailable",
+                "guidance": "Choose one discovered Frigate total person-count source using camera_status; no camera was inferred.",
+            }
+        else:
+            from camera_awareness import read_camera
+
+            result["camera"] = await read_camera(context, "current", camera, sources[0])
+            result["camera"].pop("person_track_ids", None)
+        if not result["camera"].get("verified"):
+            result["partial"] = True
+    return result

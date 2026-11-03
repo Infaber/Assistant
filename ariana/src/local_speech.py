@@ -81,7 +81,15 @@ class LocalSTT(stt.STT):
 
 
 class LocalTTS(tts.TTS):
-    def __init__(self):
+    def __init__(self, speed=None):
+        from preferences_tools import read_preferences
+
+        value = (
+            speed if speed is not None else read_preferences().get("local_speed", "1.0")
+        )
+        if str(value) not in {"0.8", "1.0", "1.2"}:
+            raise ValueError("Choose a supported Local speaking rate.")
+        self.speed = float(value)
         super().__init__(
             capabilities=tts.TTSCapabilities(streaming=False),
             sample_rate=24000,
@@ -123,7 +131,10 @@ class LocalSpeech(tts.ChunkedStream):
                 with lock:
                     if not cancelled.is_set():
                         voice.generate(
-                            self._input_text, sid=3, speed=1.0, callback=callback
+                            self._input_text,
+                            sid=3,
+                            speed=self._tts.speed,
+                            callback=callback,
                         )
             finally:
                 loop.call_soon_threadsafe(chunks.put_nowait, None)

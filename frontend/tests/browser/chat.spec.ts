@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+import {build} from 'esbuild';
+import path from 'node:path';
+test('Conversation opens a persistent multiline chat without starting the microphone',async({page})=>{
+ let calls=0;await page.route('**/api/connection',route=>{calls++;return route.fulfill({status:503,json:{error:'Offline fixture'}});});
+ await page.goto('/');await page.getByRole('button',{name:'Conversation',exact:true}).click();
+ await expect(page.locator('.orb-stage')).toHaveAttribute('data-view','chat');
+ const message=page.getByRole('textbox',{name:/^Message (?:Ariana|Jarvis)$/});
+ await expect(message).toBeFocused();await expect(message).toHaveJSProperty('tagName','TEXTAREA');
+ await message.fill('Keep this draft');await message.press('Shift+Enter');await message.pressSequentially('Second line');
+ await expect(message).toHaveValue('Keep this draft\nSecond line');
+ await expect(page.getByRole('button',{name:'Send message',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Close conversation',exact:true}).click();
+ await expect(page.locator('canvas')).toBeVisible();
+ await page.getByRole('button',{name:'Conversation',exact:true}).click();
+ await expect(message).toHaveValue('Keep this draft\nSecond line');
+ expect(calls).toBe(0);
+ await page.setViewportSize({width:390,height:568});
+ const composer=await page.locator('.input-overlay').boundingBox();const chat=await page.locator('.chat-view').boundingBox();
+ expect(chat!.y+chat!.height).toBeLessThanOrEqual(composer!.y);
+ expect(composer!.y+composer!.height).toBeLessThanOrEqual(568);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+test('chat sends two typed turns and keeps both replies visible',async({page})=>{
+ const bundle=(await build({entryPoints:[path.resolve('tests/fixtures/chat.tsx')],bundle:true,write:false,platform:'browser',format:'iife',jsx:'automatic',define:{'process.env.NEXT_PUBLIC_ASSISTANT_NAME':'"Ariana"'}})).outputFiles[0].text;
+ await page.route('**/chat-fixture',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="root"></div><script>'+bundle.replaceAll('</script','<\\/script')+'</script>'}));await page.goto('/chat-fixture');
+ const input=page.getByRole('textbox',{name:/^Message (?:Ariana|Jarvis)$/});
+ await input.fill('First turn');await input.press('Enter');
+ await expect(page.getByText('Fixture reply: First turn',{exact:true})).toBeVisible();
+ await input.fill('Second turn\nwith a second line');await page.getByRole('button',{name:'Send message',exact:true}).click();
+ await expect(page.getByText('Fixture reply: Second turn\nwith a second line',{exact:true})).toBeVisible();
+ await expect(page.locator('.chat-message')).toHaveCount(4);await expect(input).toHaveValue('');
+ await expect(input).toBeFocused();
+});

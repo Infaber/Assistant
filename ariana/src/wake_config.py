@@ -23,3 +23,25 @@ def model_files(directory):
         "tokens": directory / "tokens.txt",
         "keywords_file": directory / "ariana-keywords.txt",
     }
+
+
+def configured_phrase(directory):
+    import hashlib
+    import json
+
+    try:
+        directory = Path(directory)
+        metadata = json.loads((directory / "wake-phrase.json").read_text())
+        phrase = metadata["phrase"]
+        if (
+            not isinstance(phrase, str)
+            or not 1 <= len(phrase) <= 60
+            or not all(c.isalpha() or c == " " for c in phrase)
+        ):
+            return "Custom phrase"
+        digest = hashlib.sha256(
+            model_files(directory)["keywords_file"].read_bytes()
+        ).hexdigest()
+        return phrase if metadata.get("keywords_sha256") == digest else "Custom phrase"
+    except (OSError, ValueError, KeyError, TypeError):
+        return "Custom phrase"

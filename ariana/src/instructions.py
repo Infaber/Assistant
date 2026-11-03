@@ -1,6 +1,6 @@
 """Conversational policy. Mandatory effect guards live in the tools, not this text."""
 
-from personality import personality_instructions
+from personality import GEMINI_DELIVERY, personality_instructions
 
 ACTION_INSTRUCTIONS = """
 Actions and grounding:
@@ -192,7 +192,7 @@ Never claim wake-word listening without companion state. Advisory plans grant no
 """
 
 
-ARIANA_INSTRUCTIONS = personality_instructions() + ACTION_INSTRUCTIONS
+ARIANA_INSTRUCTIONS = personality_instructions() + GEMINI_DELIVERY + ACTION_INSTRUCTIONS
 
 
 def configured_instructions(mode="normal"):
@@ -206,6 +206,7 @@ def configured_instructions(mode="normal"):
     current = datetime.now(ZoneInfo("Europe/Oslo")).isoformat(timespec="minutes")
     return (
         personality_instructions(persona, read_preferences())
+        + (GEMINI_DELIVERY if mode == "normal" and persona != "jarvis" else "")
         + (LOCAL_ACTION_INSTRUCTIONS if mode == "local" else ACTION_INSTRUCTIONS)
         + "\nCurrent local date/time (Europe/Oslo): "
         + current

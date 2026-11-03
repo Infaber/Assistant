@@ -10,3 +10,6 @@
 *.pv
 *.log
 .DS_Store
+
+# Python helper bytecode
+__pycache__/

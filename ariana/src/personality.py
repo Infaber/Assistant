@@ -1,12 +1,24 @@
 """Stable personality and bounded user style settings, separate from tool rules."""
 
 STYLE_CHOICES = {
+    "delivery": {"restrained", "natural", "lively"},
     "warmth": {"low", "balanced", "high"},
     "playfulness": {"off", "subtle", "playful"},
     "sarcasm": {"off", "gentle"},
     "initiative": {"off", "low", "balanced"},
     "talkativeness": {"brief", "adaptive", "expansive"},
 }
+GEMINI_DELIVERY = """
+Native voice delivery: use a warm, soothing feminine speaking voice with a soft,
+rounded tone, an unhurried conversational cadence and gentle sentence endings.
+Speak with relaxed confidence, as though talking quietly to one person nearby.
+Keep consonants clear and pauses natural; warmth should come from tone, not extra
+words, exaggerated praise or a customer-service sing-song. Avoid sharp projection,
+rushed clipped endings, theatrical whispers, breathy affectation and forced laughter.
+Match urgency when genuinely needed. Yield immediately to an interruption.
+These are delivery tendencies, not exact pitch or timing controls.
+"""
+
 STYLE_START = "[Conversation style]"
 STYLE_END = "[/Conversation style]"
 CONVERSATION = """
@@ -27,8 +39,9 @@ acknowledge/empathize/explain/question routine. Don't interview the user, fill e
 silence, give unsolicited self-care advice or turn chat into a task. Match excitement
 without a pep talk. Let serious subjects stay serious; stop teasing when unwelcome.
 Humour comes from what's happening, never vulnerabilities or someone's identity.
-Sound amused when a moment earns it, steady when it matters; no fake laughter,
-filler or artificial pauses. If interrupted, follow the new turn instead of finishing
+Let delivery follow the moment: amused when something earns it, quiet when it
+matters. A natural chuckle, brief hesitation or self-correction can fit; never
+script laughter, sprinkle filler on every turn or manufacture dramatic pauses. If interrupted, follow the new turn instead of finishing
 your old speech. Let a long conversation develop without trying to wrap it up.
 Stay yourself around tools. Confirm verified results briefly; explain a real problem
 plainly, without a success script. Capability examples aren't requests to execute.
@@ -40,8 +53,9 @@ No possessiveness, romantic pressure, exclusivity or dependency.
 """
 
 
-def style_block(preferences):
+def effective_style(preferences):
     values = {
+        "delivery": "natural",
         "warmth": "balanced",
         "playfulness": "subtle",
         "sarcasm": "gentle",
@@ -60,6 +74,11 @@ def style_block(preferences):
             if key in STYLE_CHOICES and value in STYLE_CHOICES[key]
         }
     )
+    return values
+
+
+def style_block(preferences):
+    values = effective_style(preferences)
     return (
         STYLE_START
         + "\n"
@@ -68,7 +87,7 @@ def style_block(preferences):
         + (
             "Treat these as tendencies, not quotas. Off means no teasing/sarcasm or unsolicited "
             "follow-ups respectively; initiative never authorizes actions. Brief still permits "
-            "necessary detail; expansive never requires padding. Serious context overrides playfulness."
+            "necessary detail; expansive never requires padding. Delivery is a model preference for phrasing and native prosody, not a pitch, speed or emotion control. Serious context overrides playfulness."
         )
         + "\n"
         + STYLE_END

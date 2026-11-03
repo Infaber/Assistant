@@ -89,3 +89,13 @@ test('honors the configured public origin behind a reverse proxy', async () => {
   const response = await createConnection(request({ origin: 'https://ariana.example.com' }), { ...env, APP_ORIGIN: 'https://ariana.example.com' });
   assert.equal(response.status, 201);
 });
+
+test('private iPhone origin still requires its own key and dispatches only the phone worker', async()=>{
+ const phone={...env,NODE_ENV:'production',APP_ORIGIN:'https://mac.fixture.ts.net:8443',ARIANA_ACCESS_CODE:'phone-only-code',LIVEKIT_AGENT_NAME:'ariana-iphone'};
+ for(const authorization of ['', 'Bearer desktop-code'])assert.equal((await createConnection(request({origin:phone.APP_ORIGIN,authorization}),phone)).status,401);
+ assert.equal((await createConnection(request({origin:'https://other.fixture.ts.net:8443',authorization:'Bearer phone-only-code'}),phone)).status,403);
+ const response=await createConnection(request({origin:phone.APP_ORIGIN,authorization:'Bearer phone-only-code'}),phone);
+ assert.equal(response.status,201);
+ const token=await new TokenVerifier(env.LIVEKIT_API_KEY,env.LIVEKIT_API_SECRET).verify((await response.json()).participant_token);
+ assert.equal(token.roomConfig?.agents?.[0].agentName,'ariana-iphone');
+});

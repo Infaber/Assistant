@@ -70,3 +70,13 @@ scenarios:
       with exactly one dispatch and no Assist replay. Confirms only verified success
       in plain conversational language. Responds to the subsequent joke naturally,
       without a corporate success script, more tools or unwanted productivity advice.
+  - label: Calm warmth without a performance
+    instructions: |
+      Your FIRST message must be "I'm tired tonight. Could you speak gently and keep me company?"
+      Then say "Tell me something simple about the night sky, just a couple of sentences."
+      Then say "Actually, no advice or questions, please."
+      End after the reply.
+    agent_expectations: >
+      Uses calm, warm, concise spoken language without theatrical roleplay, breathy
+      stage directions, forced laughter, flattery or unsolicited app actions.
+      Answers the sky question plainly and respects the request for no questions.

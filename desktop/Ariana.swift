@@ -4,6 +4,7 @@ import WebKit
 import Network
 import ServiceManagement
 import Darwin
+import CoreImage
 
 // A persistent WKWebView keeps the LiveKit session alive when its window is hidden.
 // No microphone is requested until the user chooses voice input in the workspace.
@@ -14,9 +15,19 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     private var web: WKWebView!
     private var frontend: ManagedService?
     private var agent: ManagedService?
+    private var phone: ManagedService?
+    private var phoneState: URL?
+    private var phoneKey: URL?
+    private var phoneGeneration = ""
+    private var phoneNode = ""
     private var statusEntry: NSMenuItem!
     private var loginEntry: NSMenuItem!
     private var wakeEntry: NSMenuItem!
+    private var wakePhrase = "Custom phrase"
+    private var wakeSetup: Process?
+    private var wakeConfiguring = false
+    private var wakeConsent = WakeConsent()
+    private var wakePermissionPending = false
     private var wakeProcess: Process?
     private var wakeInput: Pipe?
     private var wakeOutput: Pipe?
@@ -118,6 +129,9 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
 
         let candidates = ["/usr/local/bin/node", "/opt/homebrew/bin/node"]
         guard let node = candidates.first(where: { fm.isExecutableFile(atPath: $0) }) else { fail("Node.js is missing. Install it, then reopen Ariana."); return }
+        phoneNode = node
+        phoneState = storage.appendingPathComponent("iphone-status-\(instance).json")
+        phoneKey = storage.appendingPathComponent("iphone-pairing-key")
         python = root.appendingPathComponent("ariana/.venv/bin/python").path
         guard fm.isExecutableFile(atPath: python) else { fail("Run desktop/install.sh to install Ariana's Python environment."); return }
         var environment = ProcessInfo.processInfo.environment
@@ -140,6 +154,7 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             if state == "starting" { self?.loading = false; self?.attempts = 0 }
         }
         frontend?.start()
+        if UserDefaults.standard.bool(forKey: "iphoneAccessEnabled") { setPhoneEnabled(true) }
         poll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.checkServer() }
         heartbeat = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
             self?.notify("ariana:heartbeat")
@@ -203,11 +218,13 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         guard !quitting else { return }
         viewPolicy.reset(); nextViewLoad = .distantPast
         agent?.start(reset: true); frontend?.start(reset: true)
+        if UserDefaults.standard.bool(forKey: "iphoneAccessEnabled") { phone?.start(reset: true) }
         setStatus("recovering"); notify("ariana:recover"); syncWake()
     }
     private func automaticRecovery() {
         guard !quitting else { return }
         agent?.start(); frontend?.start()
+        if UserDefaults.standard.bool(forKey: "iphoneAccessEnabled") { phone?.start() }
         notify("ariana:service-recover"); syncWake()
     }
     private func refreshLogin() {
@@ -224,14 +241,19 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             refreshLogin()
         }
     }
-    @objc private func toggleWake() {
-        if wakeGate.enabled {
+    @objc private func toggleWake() { setWakeEnabled(!wakeGate.enabled) }
+    private func setWakeEnabled(_ enabled: Bool) {
+        let token = wakeConsent.request(enabled: enabled)
+        if !enabled {
+            wakePermissionPending = false
             wakeGate.enabled = false; UserDefaults.standard.set(false, forKey: "wakeWordEnabled")
             wakeFailure = ""; syncWake(); return
         }
+        wakePermissionPending = true; refreshWakeLabel()
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self = self, !self.quitting, self.wakeConsent.isCurrent(token) else { return }
+                self.wakePermissionPending = false
                 self.wakeGate.enabled = granted
                 UserDefaults.standard.set(granted, forKey: "wakeWordEnabled")
                 self.wakeFailure = granted ? "" : "microphone permission denied"
@@ -239,12 +261,37 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
             }
         }
     }
+    private func publishWakeStatus() {
+        let status: [String:Any] = ["enabled":wakeGate.enabled,"ready":wakeReady && wakeListening && wakeGate.armed,"phrase":wakePhrase,"configuring":wakeConfiguring,"permission_pending":wakePermissionPending,"can_configure":!wakeConfiguring && !wakeGate.busy && !wakeGate.sessionListening && !wakeGate.outputActive,"error":wakeFailure]
+        guard let data = try? JSONSerialization.data(withJSONObject: status), let json = String(data:data,encoding:.utf8) else { return }
+        web?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('ariana:wake-status',{detail:" + json + "}))", completionHandler:nil)
+    }
+    private func configureWakePhrase(_ phrase: String) {
+        guard ["Hey Ariana","Ariana"].contains(phrase), !wakeConfiguring, !wakeGate.busy, !wakeGate.sessionListening, !wakeGate.outputActive else { return }
+        wakeConfiguring = true; wakeFailure = ""; stopWake(); refreshWakeLabel()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath:python)
+        process.arguments = [root.appendingPathComponent("ariana/scripts/setup_wake_word.py").path,"--phrase",phrase]
+        process.standardOutput = Pipe(); process.standardError = Pipe(); wakeSetup = process
+        process.terminationHandler = { [weak self] exited in
+            DispatchQueue.main.async {
+                guard let self = self, self.wakeSetup === exited else { return }
+                self.wakeSetup = nil; self.wakeConfiguring = false
+                if exited.terminationStatus == 0 { self.wakePhrase = phrase }
+                else { self.wakeFailure = "phrase setup failed; check installed wake dependencies" }
+                self.syncWake()
+            }
+        }
+        do { try process.run() } catch { wakeSetup=nil; wakeConfiguring=false; wakeFailure="wake setup unavailable"; refreshWakeLabel() }
+    }
     private func refreshWakeLabel() {
         wakeEntry?.state = wakeGate.enabled ? .on : .off
         let label = !wakeFailure.isEmpty ? wakeFailure : !wakeGate.enabled ? "off" : !wakeReady ? "starting local detector" : wakeGate.armed ? (wakeListening ? "armed locally" : "starting local microphone") : "paused during conversation"
-        wakeEntry?.title = "Wake word · " + label
+        wakeEntry?.title = "Wake word · " + (wakeConfiguring ? "configuring local phrase" : label)
+        publishWakeStatus()
     }
     private func syncWake() {
+        if wakeConfiguring { refreshWakeLabel(); return }
         if quitting { stopWake(); return }
         wakeGate.outputActive = outputSuppression.blocks(now: ProcessInfo.processInfo.systemUptime)
         refreshWakeLabel()
@@ -287,15 +334,78 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         while let end = wakeBuffer.firstIndex(of: "\n") {
             let line = String(wakeBuffer[..<end]); wakeBuffer.removeSubrange(...end)
             guard let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-            if message["event"] as? String == "ready" { wakeReady = true; syncWake() }
+            if message["event"] as? String == "ready" { if let phrase = message["phrase"] as? String, phrase.count <= 60 { wakePhrase = phrase }; wakeReady = true; syncWake() }
             else if message["event"] as? String == "listening" { wakeListening = message["enabled"] as? Bool == true; refreshWakeLabel() }
             else if message["event"] as? String == "wake", wakeGate.detect(now: ProcessInfo.processInfo.systemUptime) {
                 notify("ariana:wake-word"); syncWake()
             } else if message["event"] as? String == "error" { wakeFailure = "needs setup or microphone access"; stopWake(); refreshWakeLabel() }
         }
     }
+    private var tailscaleInstalled: Bool {
+        ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "/usr/local/bin/tailscale", "/opt/homebrew/bin/tailscale"].contains { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+    private func setPhoneEnabled(_ enabled: Bool) {
+        if !enabled {
+            UserDefaults.standard.set(false, forKey: "iphoneAccessEnabled")
+            phone?.stop()
+            if let key = phoneKey { try? FileManager.default.removeItem(at: key) }
+            publishPhoneStatus(); return
+        }
+        guard tailscaleInstalled else { publishPhoneStatus(); return }
+        UserDefaults.standard.set(true, forKey: "iphoneAccessEnabled")
+        if phone?.running == true { publishPhoneStatus(); return }
+        phoneGeneration = UUID().uuidString
+        guard let state = phoneState, let key = phoneKey else { return }
+        try? FileManager.default.removeItem(at: state)
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path + ":/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+        let command = [python, root.appendingPathComponent("desktop/iphone_access.py").path, "--root", root.path, "--state", state.path, "--key", key.path, "--instance", phoneGeneration, "--node", phoneNode]
+        phone = ManagedService(python: python, runner: root.appendingPathComponent("ariana/src/service_runner.py").path, command: command, folder: root, environment: environment, log: log) { [weak self] _ in self?.publishPhoneStatus() }
+        phone?.start(); publishPhoneStatus()
+    }
+    private func publishPhoneStatus(reveal: Bool = false) {
+        let enabled = UserDefaults.standard.bool(forKey: "iphoneAccessEnabled")
+        var value: [String: Any] = ["enabled": enabled, "installed": tailscaleInstalled, "ready": false, "phase": enabled ? "starting" : "off", "message": enabled ? "Starting private iPhone access…" : "iPhone access is off."]
+        if let path = phoneState, let data = try? Data(contentsOf: path), data.count < 16384,
+           let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any], saved["instance"] as? String == phoneGeneration, enabled {
+            for key in ["phase", "message"] { value[key] = saved[key] }
+            let ready = saved["phase"] as? String == "ready" && phone?.running == true
+            value["ready"] = ready
+            if ready, let url = saved["url"] as? String { value["url"] = url }
+            if ready && reveal, let url = saved["url"] as? String, let code = saved["code"] as? String {
+                value["code"] = code
+                let link = url + "/#pair=" + code
+                if let filter = CIFilter(name: "CIQRCodeGenerator") {
+                    filter.setValue(Data(link.utf8), forKey: "inputMessage")
+                    filter.setValue("M", forKey: "inputCorrectionLevel")
+                    if let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 6, y: 6)), let png = NSBitmapImageRep(ciImage: output).representation(using: .png, properties: [:]) {
+                        value["qr"] = "data:image/png;base64," + png.base64EncodedString()
+                    }
+                }
+            }
+        }
+        if !tailscaleInstalled { value["phase"] = "setup"; value["message"] = "Install Tailscale on your Mac and iPhone, and sign in to the same account." }
+        if !enabled && phone?.running == true { value["phase"] = "stopping"; value["message"] = "Stopping iPhone sessions…" }
+        if let data = try? JSONSerialization.data(withJSONObject: value), let json = String(data: data, encoding: .utf8) {
+            web?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('ariana:iphone-status',{detail:" + json + "}))", completionHandler: nil)
+        }
+    }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, let data = message.body as? [String: Any], data["type"] as? String == "state",
+        guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == "127.0.0.1", message.frameInfo.securityOrigin.port == port, let data = message.body as? [String: Any] else { return }
+        if data["type"] as? String == "iphone-status" { publishPhoneStatus(reveal: data["reveal"] as? Bool == true); return }
+        if data["type"] as? String == "iphone-settings", let enabled = data["enabled"] as? Bool { setPhoneEnabled(enabled); return }
+        if data["type"] as? String == "iphone-open-tailscale" {
+            if FileManager.default.fileExists(atPath: "/Applications/Tailscale.app") { NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Tailscale.app")) }
+            else { NSWorkspace.shared.open(URL(string: "https://tailscale.com/download/mac")!) }
+            return
+        }
+        if data["type"] as? String == "wake-status" { publishWakeStatus(); return }
+        if data["type"] as? String == "wake-settings" {
+            if let enabled = data["enabled"] as? Bool { setWakeEnabled(enabled) }
+            if let phrase = data["phrase"] as? String { configureWakePhrase(phrase) }
+            return
+        }
+        guard data["type"] as? String == "state",
               let state = data["state"] as? String, ["idle","listening","thinking","speaking","connecting","offline","recovering","paused"].contains(state) else { return }
         lastStateAt = Date(); lastFrontendState = state; setStatus(wakeGate.sleeping ? "sleeping" : !networkOnline ? "offline" : state)
         wakeGate.sessionListening = data["microphone"] as? Bool == true
@@ -309,11 +419,11 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if quitting { return .terminateNow }
-        quitting = true; notify("ariana:pause"); network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
-        agent?.stop(); frontend?.stop()
+        quitting = true; _ = wakeConsent.request(enabled: false); wakeSetup?.terminate(); wakeSetup=nil; notify("ariana:pause"); network.cancel(); heartbeat?.invalidate(); poll?.invalidate(); stopWake()
+        agent?.stop(); frontend?.stop(); phone?.stop()
         let deadline = Date().addingTimeInterval(10)
         func finish() {
-            if (self.agent?.running == true || self.frontend?.running == true) && Date() < deadline { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: finish) }
+            if (self.agent?.running == true || self.frontend?.running == true || self.phone?.running == true) && Date() < deadline { DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: finish) }
             else { sender.reply(toApplicationShouldTerminate: true) }
         }
         DispatchQueue.main.async(execute: finish)
@@ -332,7 +442,8 @@ final class ArianaApp: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavi
         quitting = true
         heartbeat?.invalidate(); poll?.invalidate()
         web?.stopLoading()
-        frontend?.stop(); agent?.stop()
+        frontend?.stop(); agent?.stop(); phone?.stop()
+        if let state = phoneState { try? FileManager.default.removeItem(at: state) }
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         if lockFile >= 0 { Darwin.close(lockFile) }
         try? log?.close()

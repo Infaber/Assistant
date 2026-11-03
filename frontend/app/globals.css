@@ -570,3 +570,85 @@ input[type="checkbox"] {
 .ai-mode-control summary {cursor:pointer; opacity:.6;}
 .ai-mode-control .mode-error {color:#e4a7ba;}
 @media(max-width:600px) {.ai-mode-control {bottom:86px;left:20px;width:calc(100vw - 40px);}}
+
+.voice-settings {display:grid;gap:10px;margin:16px 0;padding:14px 0;border-bottom:1px solid #ffffff18;font-size:12px;}
+.voice-settings label {display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.voice-settings select,.voice-settings button {max-width:100%;border:1px solid #ffffff28;border-radius:8px;background:#20202b;color:#eee;padding:7px;}
+.voice-settings small {opacity:.65;line-height:1.5;}
+.voice-settings pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;}
+.listening-cue {position:fixed;top:24%;left:50%;transform:translateX(-50%);font-size:12px;letter-spacing:.04em;color:#b9c6d8;pointer-events:none;}
+.listening-cue.expressive {padding:8px 16px;border:1px solid #b9c6d848;border-radius:20px;background:#10101870;}
+
+/* Conversation hierarchy: the orb remains the focal point, controls stay discoverable. */
+.conversation-status {position:fixed;top:38px;left:50%;transform:translateX(-50%);width:min(620px,calc(100% - 40px));text-align:center;pointer-events:none;}
+.conversation-status .eyebrow {font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#b8a9cc;}
+.conversation-status h2 {font-size:clamp(22px,3vw,32px);font-weight:450;letter-spacing:-.035em;margin:10px 0;}
+.conversation-status p {font-size:12px;line-height:1.6;color:#abb1c3;margin:0 auto;max-width:450px;}
+.conversation-status button {pointer-events:auto;margin-top:12px;padding:8px 16px;border:1px solid #a99bc855;border-radius:20px;background:#262134;color:#eee;}
+.conversation-preview {position:fixed;left:50%;bottom:110px;transform:translateX(-50%);width:min(560px,calc(100% - 48px));max-height:24vh;overflow:auto;scrollbar-width:thin;mask-image:linear-gradient(transparent,#000 10px);padding-top:12px;}
+.conversation-preview article {padding:9px 16px;border-left:1px solid #a897d344;margin:8px 0;background:#14121d88;border-radius:0 12px 12px 0;}
+.conversation-preview article span {font-size:10px;color:#c0aedc;letter-spacing:.04em;}
+.conversation-preview article p {font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;margin:4px 0;}
+.conversation-empty {text-align:center;color:#a7a5b5;font-size:13px;line-height:1.8;}
+.quiet-controls {opacity:1 !important;pointer-events:auto !important;}
+.settings-dialog {width:min(680px,calc(100vw - 32px));}
+.voice-settings {padding:20px 0;gap:14px;font-size:13px;}
+.voice-settings h3 {font-size:18px;font-weight:500;margin:0;}
+.voice-settings p {line-height:1.65;margin:0;}
+.voice-settings small {opacity:1;color:#b7b5c5;}
+.voice-settings label {line-height:1.5;}
+.voice-settings select {max-width:60%;min-height:36px;}
+.voice-settings button {min-height:38px;padding:8px 12px;cursor:pointer;}
+.voice-settings button:disabled {opacity:.45;cursor:default;}
+.voice-settings details {padding:14px;background:#ffffff05;border:1px solid #ffffff14;border-radius:12px;}
+.voice-settings summary {cursor:pointer;font-weight:500;padding:4px 0;}
+.voice-settings details p {margin:12px 0;}
+.effective-settings {padding:14px 16px;border:1px solid #ac99d238;border-radius:12px;background:#a18ac30a;}
+.effective-settings strong {font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#cfc0ea;}
+.effective-settings .pending-settings {margin-top:8px;color:#edce93;}
+.sample-script {padding:12px;border-left:2px solid #ac99d2;color:#d1ccdc;}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible {outline:2px solid #d3b7ff;outline-offset:4px;}
+@media(max-width:600px) {
+ .conversation-status {top:28px;}
+ .conversation-preview {bottom:240px;max-height:18vh;}
+ .orb-center {transform:translateY(-5vh);}
+ .voice-settings label {align-items:flex-start;flex-direction:column;gap:6px;}
+ .voice-settings select {width:100%;max-width:100%;}
+}
+@media(max-height:650px) {.conversation-status {top:16px;} .conversation-preview {max-height:18vh;} .conversation-empty {display:none;}}
+.settings-dialog {background:#13131bf5;}
+
+.timing-table {overflow-x:auto;}
+.timing-table table {border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums;}
+.timing-table th,.timing-table td {padding:10px 8px;text-align:left;border-bottom:1px solid #ffffff18;}
+.timing-table caption {text-align:left;padding:12px 0;color:#cfc0ea;}
+
+.conversation-history-link {display:block;margin:0 0 6px auto;color:#cfc0ea;font-size:12px;padding:8px 0;}
+
+/* Reserve separate space for readable conversation/error content and controls. */
+.orb-stage:has(.conversation-preview article, .error-banner) .orb-center {
+  top: 140px;
+  bottom: calc(130px + 24vh);
+  transform: none;
+}
+.orb-stage:has(.conversation-preview article, .error-banner) .orb-touch {
+  width: min(35vmin, 220px);
+  height: min(35vmin, 220px);
+}
+.error-banner {
+  position: fixed;
+  top: auto;
+  bottom: 120px;
+  max-height: 24vh;
+  background: #17171ff5;
+}
+.error-banner p {min-width:0;max-height:18vh;overflow:auto;overflow-wrap:anywhere;}
+.orb-stage:has(.error-banner) .conversation-preview {display:none;}
+@media(max-width:600px) {
+  .error-banner {bottom:240px;max-height:18vh;}
+  .error-banner p {max-height:calc(18vh - 30px);}
+  .orb-stage:has(.conversation-preview article, .error-banner) .orb-center {bottom:calc(260px + 18vh);}
+}
+@media(max-height:650px) {
+  .orb-stage:has(.conversation-preview article, .error-banner) .orb-center {display:none;}
+}

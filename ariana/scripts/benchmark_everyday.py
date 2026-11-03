@@ -21,7 +21,7 @@ CASES = [
     ("lights", "Turn my desk lights on."),
     ("music", "Pause Spotify."),
     ("calendar", "What is on my calendar today?"),
-    ("memory_save", "Remember my fictional test rover uses an ESP32."),
+    ("memory_save", "Remember my test rover uses an ESP32."),
     ("memory_recall", "Which controller does my test rover use?"),
 ]
 
@@ -95,7 +95,13 @@ async def benchmark(args):
             "This benchmark does not provide this app. No operation occurred."
         )
 
-    agent = Assistant(mode="local")
+    ready = asyncio.Event()
+
+    async def on_ready(mode):
+        assert mode == "local"
+        ready.set()
+
+    agent = Assistant(mode="local", on_ready=on_ready)
     allowed = {
         "memory_manage",
         "task_status",
@@ -121,6 +127,7 @@ async def benchmark(args):
     mocks["calendar_today"] = calendar
     mock_tools(Assistant, mocks, session=session)
     rows, replies = [], []
+    checks_passed = False
 
     @session.on("conversation_item_added")
     def on_item(event):
@@ -129,6 +136,7 @@ async def benchmark(args):
 
     try:
         await session.start(agent=agent)
+        await asyncio.wait_for(ready.wait(), 40)
         for name, prompt in CASES:
             sink.first = None
             replies.clear()
@@ -158,11 +166,13 @@ async def benchmark(args):
         assert "ESP32" in rows[-1]["reply"].upper(), "Fictional memory recall failed"
         memories = MemoryStore().run({"action": "recall", "query": "ESP32"})
         assert "esp32" in json.dumps(memories).lower(), "Fictional memory was not saved"
+        checks_passed = True
     finally:
         await session.aclose()
         report = {
             "model": local_model(),
-            "scope": "text submission to first server audio frame; synthetic output and fictional apps",
+            "scope": "after backend readiness: text submission to first server audio frame; synthetic output and fictional apps",
+            "checks_passed": checks_passed,
             "turns": rows,
             "timings": performance.summary(),
             "fake_light_posts": len([e for e in api.events if e[0] == "POST"]),

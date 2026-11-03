@@ -75,7 +75,10 @@ def tokens(text: str) -> set[str]:
 
 
 def relevant_memories(
-    rows: list[tuple[str, str]], query: str, limit: int = 6
+    rows: list[tuple[str, str]],
+    query: str,
+    limit: int = 6,
+    importance: dict[str, int] | None = None,
 ) -> list[dict]:
     terms = tokens(query)
     if not terms:
@@ -96,6 +99,8 @@ def relevant_memories(
             for term in direct
         )
         score += sum(0.3 if term in tt else 0.15 for term in indirect)
+        # Importance only breaks relevance ties; it never introduces an unmatched fact.
+        score *= 1 + 0.1 * ((importance or {}).get(topic, 3) - 3)
         ranked.append((score, topic, fact))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     return [

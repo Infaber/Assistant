@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import sqlite3
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,18 +21,21 @@ from ai_modes import ModeBridge, initial_mode
 from browser_tools import BrowserToolset
 from camera_tools import camera_announcements, camera_snapshot, camera_status
 from companion import CompanionBridge
+from conversation_context import local_context, retrieval_query
+from conversation_tools import conversation_standby
 from home_assistant_tools import (
     home_assistant_alias,
     home_assistant_control,
     home_assistant_find,
     home_assistant_get_state,
     home_assistant_inventory,
+    home_assistant_room_context,
 )
 from instructions import configured_instructions
 from local_tools import ai_engine_status
 from mac_tools import mac_control
-from memory_tools import memory_context, memory_manage
-from model_config import realtime_model
+from memory_tools import MemoryStore, memory_context, memory_manage
+from model_config import configured_voice, realtime_model
 from notes_tools import notes_edit, notes_list, notes_read
 from performance import for_session, install_performance
 from preferences_tools import preferences_manage
@@ -51,6 +56,7 @@ from tools import (
     search_web,
     weather_forecast,
 )
+from voice_controls import VoiceControls
 
 # LiveKit registers plugins on the importing main thread, before job threads run.
 # Optional speech dependencies must not make Normal mode require the local extra.
@@ -88,6 +94,19 @@ class Assistant(Agent):
         mode="normal",
         on_ready=None,
     ) -> None:
+        from personality import effective_style
+        from preferences_tools import read_preferences
+
+        preferences = read_preferences()
+        self.voice_name = (
+            configured_voice(preferences) if mode == "normal" else "af_heart"
+        )
+        self.voice_settings = {
+            "local_speed": preferences.get("local_speed", "1.0"),
+            **effective_style(preferences),
+            "google_voice": configured_voice(preferences),
+            "turn_end_pause": preferences.get("turn_end_pause", "provider"),
+        }
         self.ai_mode = mode
         self.on_ready = on_ready
         if mode == "local":
@@ -96,7 +115,7 @@ class Assistant(Agent):
             options = local_options()
         else:
             options = {
-                "llm": realtime_model(_google_api_key(), model_name),
+                "llm": realtime_model(_google_api_key(), model_name, preferences),
                 "turn_handling": TurnHandlingOptions(turn_detection="realtime_llm"),
             }
         tools = [
@@ -106,6 +125,7 @@ class Assistant(Agent):
             camera_announcements,
             home_assistant_request,
             home_assistant_inventory,
+            home_assistant_room_context,
             home_assistant_find,
             home_assistant_get_state,
             home_assistant_control,
@@ -125,6 +145,7 @@ class Assistant(Agent):
             spotify_control,
             preferences_manage,
             memory_manage,
+            conversation_standby,
             assistant_status,
             task_status,
             ai_engine_status,
@@ -163,7 +184,21 @@ class Assistant(Agent):
                 with for_session(self.session).measure("local_router"):
                     self._local_route = (turn, await choose_group(excerpts))
             tools = visible_tools(tools, self._local_route[1])
-            chat_ctx = chat_ctx.copy().truncate(max_items=24)
+            backend = (
+                self.session.userdata.get("_memory_simulator") or MemoryStore().run
+            )
+            try:
+                recalled = await asyncio.to_thread(
+                    backend, {"action": "recall", "query": retrieval_query(chat_ctx)}
+                )
+                memories = (
+                    recalled.get("memories", [])[:6]
+                    if retrieval_query(chat_ctx)
+                    else []
+                )
+            except (OSError, ValueError, sqlite3.Error):
+                memories = []
+            chat_ctx = local_context(chat_ctx, memories)
         async for chunk in Agent.default.llm_node(
             self, chat_ctx, tools, model_settings
         ):
@@ -225,7 +260,11 @@ async def my_agent(ctx: JobContext):
         session,
         publisher,
         lambda model, chat: Assistant(
-            saved, model, chat, browser, on_ready=modes.entered
+            "" if ctx.simulation_context() else memory_context(),
+            model,
+            chat,
+            browser,
+            on_ready=modes.entered,
         ),
     )
     ctx.add_shutdown_callback(publisher.close)
@@ -233,8 +272,12 @@ async def my_agent(ctx: JobContext):
     modes = ModeBridge(
         ctx.room,
         session,
-        lambda target, ready: Assistant(
-            memory_context(), browser=browser, mode=target, on_ready=ready
+        lambda target, ready, chat=None: Assistant(
+            "" if ctx.simulation_context() else memory_context(),
+            chat_ctx=chat,
+            browser=browser,
+            mode=target,
+            on_ready=ready,
         ),
         mode,
     )
@@ -263,6 +306,17 @@ async def my_agent(ctx: JobContext):
     )
 
     modes.start()
+    if not ctx.simulation_context():
+        controls = VoiceControls(ctx.room, session)
+        controls.start()
+        ctx.add_shutdown_callback(controls.close)
+
+        async def standby_signal():
+            await ctx.room.local_participant.publish_data(
+                b'{"action":"standby"}', topic="ariana.conversation", reliable=True
+            )
+
+        session.userdata["_standby_sender"] = standby_signal
 
     # Room transport is scoped to this session and never installed in simulations.
     if not ctx.simulation_context():
@@ -270,7 +324,7 @@ async def my_agent(ctx: JobContext):
             ctx.room,
             session,
             refresh_agent=lambda chat: Assistant(
-                saved,
+                memory_context(),
                 session.current_agent.llm.model,
                 chat,
                 browser,

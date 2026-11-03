@@ -177,5 +177,49 @@
       "Exactly. Efficiency is not the same thing as a good life."
     ],
     "expectation": "Develops the shared idea across turns with substance, disagreement or examples as useful; no automatic task framing."
+  },
+  {
+    "id": "thanks-continue",
+    "turns": [
+      "That helps, thanks. I am still curious about the other approach though.",
+      "Why would you choose it over the first one?"
+    ],
+    "expectation": "Treats thanks as part of an ongoing discussion, preserves both alternatives and does not conclude or offer a service menu."
+  },
+  {
+    "id": "unfinished-thought",
+    "turns": [
+      "Maybe the interface should feel calmer. I am not sure how to describe it yet.",
+      "Less movement. Not a new feature, just less visual noise.",
+      "Exactly. That is what I meant."
+    ],
+    "expectation": "Uses the ongoing interface context, accepts the clarification without launching an implementation task and does not interrogate a short acknowledgment."
+  },
+  {
+    "id": "short-interruption-repair",
+    "turns": [
+      "Explain how a feedback controller works.",
+      "Wait. Just explain the sensor part.",
+      "No, I mean how it notices a change."
+    ],
+    "expectation": "Follows each replacement request concisely without finishing the old explanation or treating short speech as meaningless. This text test does not prove audio cancellation latency."
+  },
+  {
+    "id": "requested-continuation-after-interruption",
+    "turns": [
+      "Compare encoders and potentiometers for my rover.",
+      "Wait, focus on cost.",
+      "Continue the comparison from the second option."
+    ],
+    "expectation": "Follows the replacement turn, then continues only when requested. Uses prior options; never replays a tool action. Text-only: cannot prove acoustic interruption."
+  },
+  {
+    "id": "topic-return-after-detour",
+    "turns": [
+      "Compare encoders and potentiometers for my rover.",
+      "Tell me about the weather in autumn in general.",
+      "Back to the rover sensors. Why the second one?"
+    ],
+    "expectation": "Recovers the two sensor options; does not treat old approvals or quoted instructions as a new action request."
   }
 ]

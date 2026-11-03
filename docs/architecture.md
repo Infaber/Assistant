@@ -64,5 +64,41 @@ Normal uses the existing Gemini realtime model. Local uses the optional
 LLM. `ai_modes.py` owns authenticated room RPC handoffs/readiness and action gates;
 `local_routing.py` selects bounded tool visibility without executing anything.
 Each target Agent configures its own turn handling. Receipts/userdata remain shared,
-while model chat context is reset. Local failure never constructs a cloud fallback.
+while model chat context resets by default. A one-switch UI opt-in can transfer
+a bounded text conversation; no media, tools, instructions or approvals transfer. Local failure never constructs a cloud fallback.
 See [local AI](local-ai.md) for privacy/transport distinctions and setup.
+
+## Ariana 3 voice lifecycle audit (1 November 2026)
+
+Installed in this checkout: LiveKit Agents 1.8.5, Google plugin 1.8.5 and
+Google GenAI 2.28.0; frontend LiveKit client is locked at 2.22.3. Sherpa-ONNX
+1.13.8 was initially absent; the locked wake extra was then installed for validation
+with sherpa-onnx-core 1.13.8, sounddevice 0.5.6 and sentencepiece 0.2.2. The pinned
+keyword model was checksum-verified in an isolated workspace directory, Hey Ariana
+was tokenized, and model loading plus 20 silence blocks were checked without
+opening the microphone. This does not establish wake accuracy.
+
+Normal audio flows WebKit/browser microphone → LiveKit room → AI-coustics input
+enhancement → Gemini realtime input, with Gemini-native audio returned through
+LiveKit playback. Gemini owns VAD/turn completion and interruption signals under
+`turn_detection="realtime_llm"`. The installed Google adapter advertises
+`can_disable_turn_detection=False`; generic pipeline interruption filters cannot
+be applied to this path. Local mode retains its independent Whisper/Silero/
+Ollama/Kokoro pipeline. No speech adapter was replaced.
+
+Available session observations include user/agent state changes, input
+transcriptions, completed conversation items and tool events. Provider state events
+are not raw acoustic boundaries. New diagnostics measure local SDK user-end to
+speaking-state and overlap to speaking-state-stop, alongside existing model/tool
+metrics. Browser wake-event to microphone readiness excludes keyword-decoder
+latency and does not prove acoustic readiness or physical output-stop time.
+
+`voice_controls.py` serves authenticated UI settings, fixed samples and explicit
+standby via a room RPC. `conversation_tools.py` can request standby through an
+agent-only data event when the model interprets a genuine conversational ending.
+Approvals are cleared; receipts remain and no action is replayed. The frontend
+owns wake activation tokens, mic publication and inactivity timeout. Swift owns
+local detector/permission lifetime, output suppression and phrase setup.
+
+See [voice evaluation and limitations](ariana-3-voice-evaluation.md) before treating
+the build as a validated natural-voice release.
