@@ -240,6 +240,10 @@ export default function ArianaOrb({
       ctx.restore();
     }
     function draw(now: number) {
+      if (!element.width || !element.height) {
+        if (!document.hidden) frame=requestAnimationFrame(draw);
+        return;
+      }
       const dt = Math.min((now - previous) / 1000 || 0.016, 0.05);
       previous = now;
       const props = current.current;

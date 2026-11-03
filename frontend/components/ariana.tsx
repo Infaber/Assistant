@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RoomAudioRenderer,
   SessionProvider,
@@ -38,6 +38,8 @@ import {
   X,
 } from "lucide-react";
 import { assistantName } from "../lib/persona";
+import IPhoneControls from "./iphone-controls";
+import PhonePairing from "./phone-pairing";
 import SessionPanel from "./session-panel";
 import ChatTranscript from "./chat-transcript";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
@@ -84,6 +86,7 @@ export default function Ariana() {
   function confirmMode(mode: AIMode) {requestMode(mode);try {localStorage.setItem("ariana-ai-mode",mode);} catch {}}
 
   const accessCode = useRef(desktopConfig()?.accessCode || "");
+  const applyPhoneCode = useCallback((code:string)=>{accessCode.current=code;},[]);
   const credentials = useRef({ serverUrl: "", participantToken: "" });
   const [ready] = useState(() => {
     let resolve!: () => void;
@@ -105,7 +108,7 @@ export default function Ariana() {
   async function prepare(signal: AbortSignal) {
     const response = await fetch("/api/connection", {
       method: "POST",
-      headers: { Authorization: `Bearer ${accessCode.current}`, "Content-Type":"application/json" },
+      headers: { ...(accessCode.current ? {Authorization: `Bearer ${accessCode.current}`} : {}), "Content-Type":"application/json" },
       body: JSON.stringify({mode:modeRef.current}),
       signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
     });
@@ -134,6 +137,7 @@ export default function Ariana() {
           accessCode.current = code.trim();
         }}
       />
+      <PhonePairing onCode={applyPhoneCode}/>
       <RoomAudioRenderer />
     </SessionProvider>
   );
@@ -303,7 +307,7 @@ function Workspace({
         return;
       }
       if (
-        dialog.current?.open ||
+        document.querySelector("dialog[open]") ||
         (event.target instanceof HTMLElement &&
           /INPUT|TEXTAREA|SELECT/.test(event.target.tagName))
       )
@@ -987,7 +991,7 @@ function Workspace({
           </button>
         </header>
         <nav className="settings-index" aria-label="Settings sections">
-          {[['voice-section','Voice & microphone'],['appearance-section','Appearance'],['session-section','Session']].map(([id,label]) => <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({block:'start'})}>{label}<ArrowUpRight size={13}/></button>)}
+          {[['voice-section','Voice & microphone'],['appearance-section','Appearance'],['session-section','Session'],['iphone-section','iPhone']].map(([id,label]) => <button key={id} onClick={() => document.getElementById(id)?.scrollIntoView({block:'start'})}>{label}<ArrowUpRight size={13}/></button>)}
         </nav>
         <div id="voice-section"><WakeControls /></div>
         <VoiceControls participant={localParticipant} destination={agent.identity} ready={connected&&agent.isConnected} busy={agent.state==="speaking"||agent.state==="thinking"||inputLevel>0.025} onStandby={()=>window.dispatchEvent(new Event("ariana:standby"))} wakeState={wakeConversation.current.active?desktopState:wakeState} localTimings={()=>voiceDiagnostics.current} />
@@ -1085,6 +1089,7 @@ function Workspace({
             Conversation & activity
           </button>
         </div>
+        <IPhoneControls/>
         <CheckInControls
           participant={localParticipant}
           destination={agent.isConnected ? agent.identity : undefined}

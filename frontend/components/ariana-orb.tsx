@@ -27,6 +27,10 @@ function RibbonOrb({mode = "normal", theme = mode, style = 0, state = "idle", le
       if (!motion.matches && previous && now - previous < 1000 / 30) {
         frame = requestAnimationFrame(draw); return;
       }
+      if (!element.width || !element.height) {
+        if (!document.hidden) frame=requestAnimationFrame(draw);
+        return;
+      }
       const context = ctx!;
       const dt = Math.min((now - previous) / 1000 || .016, .05); previous = now;
       const props = current.current;

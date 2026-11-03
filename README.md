@@ -101,3 +101,7 @@ See [implementation and validation](docs/ariana-3-review.md) and the
 [repeatable Mac listening checklist](docs/ariana-3-listening-checklist.md).
 The review distinguishes automated checks from unexecuted acoustic acceptance and
 lists dependency fixes that still need validation after installation.
+
+## iPhone app
+
+Open the Mac app’s Settings → iPhone to set up private access, pair by QR code, and add Ariana to your iPhone Home Screen. The Mac stays the assistant’s host. See [iPhone setup](docs/iphone.md).

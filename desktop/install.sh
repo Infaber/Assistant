@@ -23,7 +23,7 @@ fi
 cd "$project_root/frontend"
 npm ci
 npm run build
-swiftc -parse-as-library -O "$project_root/desktop/Ariana.swift" "$project_root/desktop/CompanionState.swift" "$project_root/desktop/ManagedService.swift" -o "$app_root/Contents/MacOS/Ariana" -framework Cocoa -framework WebKit -framework Network -framework ServiceManagement -framework AVFoundation
+swiftc -parse-as-library -O "$project_root/desktop/Ariana.swift" "$project_root/desktop/CompanionState.swift" "$project_root/desktop/ManagedService.swift" -o "$app_root/Contents/MacOS/Ariana" -framework Cocoa -framework WebKit -framework Network -framework ServiceManagement -framework AVFoundation -framework CoreImage
 printf '%s\n' "$project_root" > "$app_root/Contents/Resources/project-path.txt"
 cat > "$app_root/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
