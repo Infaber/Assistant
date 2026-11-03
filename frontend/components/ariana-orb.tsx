@@ -1,353 +1,122 @@
 "use client";
 import { useEffect, useRef } from "react";
-export const orbStyles = [
-  "Flowing mesh",
-  "Glass bubble",
-  "Crystal burst",
-  "Shard vortex",
-  "Wireframe globe",
-  "Particle swirl",
-] as const;
+import LegacyOrb from "./legacy-ariana-orb";
+export const orbStyles = ["Silk ribbons", "Glass bubble", "Crystal burst", "Shard vortex", "Wireframe globe", "Particle swirl"] as const;
 export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 const TAU = Math.PI * 2;
-export default function ArianaOrb({
-  mode = "normal",
-  theme = mode,
-  style = 0,
-  state = "idle",
-  level = 0,
-}: {
-  mode?: "normal" | "local";
-  theme?: "normal" | "local";
-  style?: number;
-  state?: OrbState;
-  level?: number;
+
+/** Transparent, twisted spherical sheets. No bitmap or prerecorded animation. */
+function RibbonOrb({mode = "normal", theme = mode, style = 0, state = "idle", level = 0}: {
+  mode?: "normal" | "local"; theme?: "normal" | "local"; style?: number; state?: OrbState; level?: number;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const current = useRef({ style, state, level, theme });
-  current.current = { style, state, level, theme };
+  const current = useRef({theme, style, state, level});
+  current.current = {theme, style, state, level};
   useEffect(() => {
     const element = canvas.current!;
-    const context = element.getContext("2d", { alpha: false });
-    if (!context) return;
-    const ctx: CanvasRenderingContext2D = context;
+    const ctx = element.getContext("2d");
+    if (!ctx) return;
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0,
-      previous = 0,
-      time = 0,
-      energy = 0,
-      speed = 0.18,
-      tightness = 0,
-      size = 0;
-    let lastStyle = current.current.style,
-      oldStyle = lastStyle,
-      blend = 1;
+    let frame = 0, previous = 0, time = 0, energy = 0;
     const resize = () => {
-      size = element.clientWidth;
-      const dpr = Math.min(devicePixelRatio || 1, 2);
-      element.width = Math.round(size * dpr);
-      element.height = element.width;
+      const size = Math.round(element.clientWidth * Math.min(devicePixelRatio || 1, 2));
+      element.width = size; element.height = size;
     };
-    const observer = new ResizeObserver(resize);
-    observer.observe(element);
-    resize();
-    const line = (points: number[][], color: string, width = 0.001) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      points.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      ctx.stroke();
-    };
-    function inner(kind: number, alpha: number) {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      const t = time,
-        e = energy;
-      if (kind === 0) {
-        // A volumetric core with luminous, flowing surface bands.
-        const red = current.current.theme === "local";
-        const rgb = red ? "255,45,55" : "98,229,211";
-        const pearl = red ? "255,204,194" : "216,255,245";
-        const radius = 0.295;
-        const aura = ctx.createRadialGradient(0,0,0.18,0,0,0.43);
-        aura.addColorStop(0, `rgba(${rgb},0)`);
-        aura.addColorStop(0.68, `rgba(${rgb},${0.13+e*0.08})`);
-        aura.addColorStop(1, `rgba(${rgb},0)`);
-        ctx.fillStyle=aura;ctx.fillRect(-0.5,-0.5,1,1);
-        const body=ctx.createRadialGradient(-0.11,-0.13,0.01,0.02,0.03,0.34);
-        body.addColorStop(0,red ? "#64232c" : "#22554e");
-        body.addColorStop(0.38,red ? "#22080f" : "#091f20");
-        body.addColorStop(0.78,"#020608");
-        body.addColorStop(1,red ? "#991928" : "#347e78");
-        ctx.fillStyle=body;ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.fill();
-        ctx.save();ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.clip();
-        ctx.rotate(-0.55+Math.sin(t*0.25)*0.14);
-        for(let j=0;j<54;j++) {
-          const latitude=-1.48+j/53*2.96;
-          const points=[];
-          for(let i=0;i<=130;i++) {
-            const a=-Math.PI+i/130*TAU;
-            const wave=Math.sin(a*2+t*0.65+j*0.08)*(0.055+e*0.025);
-            const y=Math.sin(latitude)*radius;
-            const r=Math.cos(latitude)*radius;
-            points.push([Math.sin(a)*r,y+Math.cos(a)*r*0.35+wave*Math.cos(latitude)]);
-          }
-          const luminous=Math.pow((Math.sin(j*0.19-t*0.8)+1)/2,5);
-          line(points,`rgba(${luminous>0.65 ? pearl : rgb},${0.07+luminous*0.63})`,0.0012+luminous*0.0015);
-        }
-        const sheen=ctx.createRadialGradient(-0.13,-0.18,0,-0.1,-0.15,0.23);
-        sheen.addColorStop(0,`rgba(${pearl},.38)`);sheen.addColorStop(0.3,`rgba(${rgb},.08)`);sheen.addColorStop(1,`rgba(${rgb},0)`);
-        ctx.fillStyle=sheen;ctx.fillRect(-0.5,-0.5,1,1);ctx.restore();
-        const rim=ctx.createLinearGradient(-0.25,-0.25,0.25,0.25);
-        rim.addColorStop(0,`rgba(${pearl},.85)`);rim.addColorStop(0.3,`rgba(${rgb},.12)`);rim.addColorStop(0.65,`rgba(${rgb},.04)`);rim.addColorStop(1,`rgba(${rgb},.65)`);
-        ctx.strokeStyle=rim;ctx.lineWidth=.002;ctx.beginPath();ctx.arc(0,0,radius,0,TAU);ctx.stroke();
-      } else if (kind === 1 || kind === 5) {
-        const glass = ctx.createRadialGradient(
-          -0.075,
-          -0.095,
-          0.01,
-          0,
-          0,
-          0.255,
-        );
-        glass.addColorStop(0, "rgba(169,219,255,.045)");
-        glass.addColorStop(0.65, "rgba(5,21,35,.04)");
-        glass.addColorStop(0.85, "rgba(54,139,184,.13)");
-        glass.addColorStop(0.94, "rgba(93,189,231,.25)");
-        glass.addColorStop(1, "rgba(23,40,76,.02)");
-        ctx.fillStyle = glass;
-        ctx.beginPath();
-        ctx.arc(0, 0, 0.255, 0, TAU);
-        ctx.fill();
-        for (let j = 0; j < 18; j++) {
-          const points = [];
-          for (let i = 0; i <= 80; i++) {
-            const a = (i / 80) * TAU;
-            const r =
-              0.245 + j * 0.0004 + Math.sin(a * 3 + t + j * 0.1) * 0.003;
-            points.push([Math.cos(a) * r, Math.sin(a) * r]);
-          }
-          line(points, `rgba(131,213,248,${0.008 + j * 0.0007})`, 0.001);
-        }
-        ctx.save();
-        ctx.rotate(-0.6 + Math.sin(t * 0.2) * 0.08);
-        ctx.scale(1, 0.83);
-        ctx.strokeStyle = "rgba(180,230,255,.23)";
-        ctx.lineWidth = 0.003;
-        ctx.beginPath();
-        ctx.arc(0, 0, 0.246, 3.5, 4.8);
-        ctx.stroke();
-        ctx.restore();
-        if (kind === 5)
-          for (let i = 0; i < 600; i++) {
-            const a = i * 2.399 + t * (0.12 + (i % 7) * 0.005),
-              r = 0.05 + Math.sqrt(i / 600) * 0.19;
-            const y = Math.sin(a) * r * 0.7;
-            ctx.fillStyle = `rgba(91,233,250,${0.15 + (0.6 * (Math.sin(a) + 1)) / 2})`;
-            ctx.beginPath();
-            ctx.arc(
-              Math.cos(a) * r,
-              y + Math.sin(r * 15 + t) * 0.025,
-              0.0006 + (i % 4) * 0.0003,
-              0,
-              TAU,
-            );
-            ctx.fill();
-          }
-      } else if (kind === 2) {
-        for (let i = 0; i < 350; i++) {
-          const a = i * 2.399 + t * 0.04,
-            r = 0.12 + (0.5 + 0.5 * Math.sin(i * 71.17)) * (0.16 + e * 0.06);
-          const x = Math.cos(a),
-            y = Math.sin(a);
-          const grad = ctx.createLinearGradient(
-            x * 0.08,
-            y * 0.08,
-            x * r,
-            y * r,
-          );
-          grad.addColorStop(0, "rgba(17,24,89,0)");
-          grad.addColorStop(0.7, "rgba(45,92,238,.4)");
-          grad.addColorStop(
-            1,
-            `rgba(${i % 8 === 0 ? "216,238,239" : "127,163,255"},.85)`,
-          );
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.moveTo(x * 0.08, y * 0.08);
-          ctx.lineTo(x * r - y * 0.003, y * r + x * 0.003);
-          ctx.lineTo(x * (r * 0.72) + y * 0.004, y * (r * 0.72) - x * 0.004);
-          ctx.closePath();
-          ctx.fill();
-        }
-      } else if (kind === 3) {
-        for (let i = 0; i < 270; i++) {
-          const u = i / 270,
-            a = i * 2.399 + t * (0.16 + u * 0.18),
-            r = 0.06 + u * 0.19,
-            w = 0.001 + u * 0.005;
-          ctx.save();
-          ctx.translate(Math.cos(a) * r, Math.sin(a) * r * 0.85);
-          ctx.rotate(a + t * 0.12);
-          ctx.fillStyle = `rgba(${180 + (i % 60)},${180 + (i % 60)},${125 + (i % 60)},${0.2 + u * 0.45})`;
-          ctx.beginPath();
-          ctx.moveTo(-w, -w * 0.3);
-          ctx.lineTo(w * 2, -w);
-          ctx.lineTo(w * 0.3, w * 2.8);
-          ctx.closePath();
-          ctx.fill();
-          ctx.restore();
-        }
-      } else {
-        const rotate = t * 0.12,
-          tilt = 0.35;
-        const project = (lat: number, lon: number) => {
-          const x = Math.cos(lat) * Math.cos(lon + rotate),
-            z = Math.cos(lat) * Math.sin(lon + rotate),
-            y = Math.sin(lat);
-          return [
-            x * 0.24,
-            (y * Math.cos(tilt) - z * Math.sin(tilt)) * 0.24,
-            z,
-          ];
-        };
-        for (let j = 0; j < 24; j++) {
-          const lat = -Math.PI / 2 + (j / 23) * Math.PI,
-            points = [];
-          for (let i = 0; i <= 90; i++) {
-            const p = project(lat, (i / 90) * TAU);
-            points.push(p);
-          }
-          line(
-            points,
-            `rgba(${132 + j * 4},${113 + j * 4},${201 - j * 2},.33)`,
-            0.0008,
-          );
-        }
-        for (let j = 0; j < 36; j++) {
-          const points = [];
-          for (let i = 0; i <= 55; i++)
-            points.push(
-              project(-Math.PI / 2 + (i / 55) * Math.PI, (j / 36) * TAU),
-            );
-          line(
-            points,
-            `rgba(${132 + j * 2.7},${113 + j * 3},${201 - j * 1.8},.3)`,
-            0.0008,
-          );
-        }
-      }
-      ctx.restore();
-    }
+    const observer = new ResizeObserver(resize); observer.observe(element); resize();
     function draw(now: number) {
-      const dt = Math.min((now - previous) / 1000 || 0.016, 0.05);
-      previous = now;
+      if (!motion.matches && previous && now - previous < 1000 / 30) {
+        frame = requestAnimationFrame(draw); return;
+      }
+      const context = ctx!;
+      const dt = Math.min((now - previous) / 1000 || .016, .05); previous = now;
       const props = current.current;
-      const target =
-        props.state === "thinking"
-          ? 0.5
-          : props.state === "speaking" || props.state === "listening"
-            ? Math.min(1, props.level * 3)
-            : 0;
-      tightness +=
-        ((props.state === "listening" ? 0.007 : 0) - tightness) *
-        (1 - Math.exp(-dt * 8));
-      energy += (target - energy) * (1 - Math.exp(-dt * 9));
-      speed +=
-        ((props.state === "thinking"
-          ? 1.25
-          : props.state === "speaking"
-            ? 0.45
-            : 0.18) -
-          speed) *
-        (1 - Math.exp(-dt * 7));
-      if (!motion.matches) time += dt * speed;
-      if (props.style !== lastStyle) {
-        oldStyle = lastStyle;
-        lastStyle = props.style;
-        blend = 0;
-      }
-      blend = Math.min(1, blend + dt * 2.5);
-      ctx.setTransform(
-        element.width,
-        0,
-        0,
-        element.height,
-        element.width / 2,
-        element.height / 2,
-      );
-      ctx.fillStyle = "#000";
-      ctx.fillRect(-0.5, -0.5, 1, 1);
-      const breathing = motion.matches ? 1 : 1 + Math.sin(time * 1.5) * 0.012;
-      ctx.scale(
-        breathing * (1 + energy * 0.025),
-        breathing * (1 + energy * 0.025),
-      );
-      if (lastStyle !== 0 || blend < 1) {
-      const halo = ctx.createRadialGradient(0, 0, 0.27, 0, 0, 0.47);
-      halo.addColorStop(0, "rgba(0,8,28,0)");
-      halo.addColorStop(0.6, `rgba(0,58,173,${0.055 + energy * 0.03})`);
-      halo.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = halo;
-      ctx.fillRect(-0.5, -0.5, 1, 1);
-      ctx.save();
-      ctx.rotate(time * 0.12);
-      // Tapered, overlapping light ribbons form two asymmetric crescents.
-      ctx.globalCompositeOperation = "screen";
-      for (let j = 0; j < 9; j++) {
-        const radius = 0.35 + j * 0.003 - tightness,
-          offset = j * 0.014;
-        for (let side = 0; side < 2; side++)
-          for (let i = 0; i < 95; i++) {
-            const u = i / 95,
-              a = -1.7 + u * 2.55 + side * Math.PI + offset;
-            const envelope = Math.pow(Math.sin(u * Math.PI), 1.8),
-              width = (0.004 + 0.017 * envelope) * (1 - j * 0.065);
-            ctx.strokeStyle = `hsla(${233 - 40 * envelope - j * 1.3},100%,${25 + envelope * 24 + j}%,${envelope * (0.14 + energy * 0.05)})`;
-            ctx.lineWidth = width;
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.arc(
-              Math.sin(time * 0.3 + j) * 0.002,
-              Math.cos(j) * 0.002,
-              radius,
-              a,
-              a + 0.029,
-            );
-            ctx.stroke();
+      const target = props.state === "thinking" ? .35 : props.state === "idle" ? 0 : Math.min(1, props.level * 3);
+      energy += (target - energy) * (1 - Math.exp(-dt * 8));
+      if (!motion.matches) time += dt * (props.state === "thinking" ? .22 : .09);
+      context.setTransform(element.width, 0, 0, element.height, element.width / 2, element.height / 2);
+      context.clearRect(-.5, -.5, 1, 1);
+      const red = props.theme === "local";
+      const cyan = red ? "255,91,107" : "142,222,255";
+      const pearl = red ? "255,202,188" : "218,238,255";
+      const lavender = red ? "241,65,91" : "198,177,244";
+      const halo = context.createRadialGradient(0, .06, .12, 0, .04, .49);
+      halo.addColorStop(0, `rgba(${cyan},.025)`); halo.addColorStop(.55, `rgba(${lavender},.075)`); halo.addColorStop(1, `rgba(${cyan},0)`);
+      context.fillStyle = halo; context.fillRect(-.5,-.5,1,1);
+      context.save();
+      const breath = motion.matches ? 1 : 1 + Math.sin(time * 2) * .012 + energy * .025;
+      context.scale(breath, breath);
+      // Three broad bands wrap a hollow volume. Their latitude twists as they orbit.
+      const project = (angle: number, across: number, band: number) => {
+        const latitude = across * .48 + Math.sin(angle * 2 + time * .6 + band * 1.7) * .19;
+        const r = .345 * (1 + .065 * Math.sin(angle + band * 2.1));
+        let x = r * Math.cos(latitude) * Math.cos(angle);
+        const y = r * Math.cos(latitude) * Math.sin(angle);
+        let z = r * Math.sin(latitude);
+        const tilt = [.95, -.85, .3][band] + Math.sin(time * .4) * .09;
+        const yy = y * Math.cos(tilt) - z * Math.sin(tilt);
+        z = y * Math.sin(tilt) + z * Math.cos(tilt);
+        const rotation = [-.5, .65, 1.8][band] + time * .13 + (props.style > 1 ? props.style * .1 : 0);
+        const xx = x * Math.cos(rotation) - yy * Math.sin(rotation);
+        const py = x * Math.sin(rotation) + yy * Math.cos(rotation);
+        x = xx;
+        const perspective = 1 + z * .25;
+        return [x * perspective * 1.04, py * perspective, z];
+      };
+      context.globalCompositeOperation = "screen";
+      // Draw the rear halves first, then the front, keeping the sheets translucent.
+      for (const front of [false, true]) {
+        for (let band = 0; band < 3; band++) {
+          const color = band === 1 ? lavender : cyan;
+          for (let strip = 0; strip < 36; strip++) {
+            const u = -1 + strip / 18, v = u + 1.06 / 18;
+            const edge = Math.pow(Math.abs((u + v) / 2), 5);
+            const gradient = context.createLinearGradient(-.3,-.3,.32,.3);
+            gradient.addColorStop(0, `rgba(${cyan},${.18 + edge * .25})`);
+            gradient.addColorStop(.35, `rgba(${color},${.06 + edge * .15})`);
+            gradient.addColorStop(.7, `rgba(${color},${.10 + edge * .23})`);
+            gradient.addColorStop(1, `rgba(${pearl},${.22 + edge * .28})`);
+            context.fillStyle = gradient; context.globalAlpha = front ? 1 : .5;
+            let upper: number[][] = [], lower: number[][] = [];
+            const fill = () => {
+              if (!upper.length) return;
+              context.beginPath();
+              [...upper,...lower.reverse()].forEach(([x,y],i)=>i ? context.lineTo(x,y) : context.moveTo(x,y));
+              context.closePath(); context.fill(); upper=[];lower=[];
+            };
+            for (let segment = 0; segment <= 180; segment++) {
+              const a = segment / 180 * TAU;
+              const p = project(a,u,band), q = project(a,v,band);
+              if (((p[2]+q[2]) > 0) !== front) { fill(); continue; }
+              upper.push(p);lower.push(q);
+            }
+            fill();context.globalAlpha=1;
           }
+          for (const edge of [-1,1]) {
+            context.beginPath();
+            let pen = false;
+            for(let segment=0;segment<=192;segment++) {
+              const [x,y,z] = project(segment/192*TAU,edge,band);
+              if ((z > 0) !== front) {pen=false;continue;}
+              if (pen) context.lineTo(x,y); else context.moveTo(x,y); pen=true;
+            }
+            context.strokeStyle = `rgba(${pearl},${front ? .9 : .38})`;
+            context.lineWidth = .00115; context.shadowColor=`rgba(${color},.6)`;context.shadowBlur=8;context.stroke();context.shadowBlur=0;
+          }
+        }
       }
-      ctx.restore();
-      }
-      const eased = blend * blend * (3 - 2 * blend);
-      if (blend < 1) inner(oldStyle, 1 - eased);
-      inner(lastStyle, eased);
-      if (!document.hidden) frame = requestAnimationFrame(draw);
+      context.restore();
+      if (!document.hidden && !motion.matches) frame = requestAnimationFrame(draw);
     }
-    const resume = () => {
-      cancelAnimationFrame(frame);
-      previous = 0;
-      frame = requestAnimationFrame(draw);
-    };
-    document.addEventListener("visibilitychange", resume);
-    motion.addEventListener("change", resume);
+    const resume = () => { cancelAnimationFrame(frame);previous=0;frame=requestAnimationFrame(draw); };
+    document.addEventListener("visibilitychange",resume);motion.addEventListener("change",resume);
     resume();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      document.removeEventListener("visibilitychange", resume);
-      motion.removeEventListener("change", resume);
-    };
+    // Reduced motion still reflects state and palette changes without continuous motion.
+    const still = setInterval(()=>{if(motion.matches && !document.hidden) resume();},250);
+    return ()=>{cancelAnimationFrame(frame);clearInterval(still);observer.disconnect();document.removeEventListener("visibilitychange",resume);motion.removeEventListener("change",resume);};
   }, []);
-  return (
-    <canvas
-      ref={canvas}
-      className="ariana-orb"
-      aria-hidden="true"
-      data-mode={mode}
-      data-theme={theme}
-      data-style={style}
-      data-state={state}
-    />
-  );
+  return <canvas ref={canvas} className="ariana-orb" aria-hidden="true" data-mode={mode} data-theme={theme} data-style={style} data-state={state}/>;
+}
+
+export default function ArianaOrb(props: Parameters<typeof RibbonOrb>[0]) {
+  return (props.style || 0) >= 2 ? <LegacyOrb {...props}/> : <RibbonOrb {...props}/>;
 }

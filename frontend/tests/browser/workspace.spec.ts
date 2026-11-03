@@ -52,7 +52,7 @@ test("six styles and caption/feedback preferences persist without connecting", a
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   for (const [index, name] of [
-    "Flowing mesh",
+    "Silk ribbons",
     "Glass bubble",
     "Crystal burst",
     "Shard vortex",
@@ -505,7 +505,7 @@ test('workspace navigation and message entry remain silent and keyboard accessib
   await page.getByRole('navigation',{name:'Workspace'}).getByRole('button',{name:/Conversation/}).click();
   await expect(page.getByRole('heading',{name:'Conversation',exact:true}).last()).toBeVisible();
   await page.getByRole('button',{name:'Close conversation',exact:true}).click();
-  await page.getByRole('button',{name:/Enter a message or command/}).click();
+  await page.getByRole('button',{name:/Ask (?:Ariana|Jarvis) anything/}).click();
   await expect(page.getByLabel(/^Message (?:Ariana|Jarvis)$/, {exact:true})).toBeFocused();
   await page.keyboard.press('Escape');
   expect(connections).toBe(0);
@@ -516,8 +516,8 @@ test('workspace panels fit desktop, tablet and narrow mobile without overlap',as
     await page.setViewportSize(viewport);await page.goto('/');
     await expect(page.getByRole('heading',{name:'Standby',exact:true})).toBeVisible();
     const voice=await page.locator('.voice-space').boundingBox();
-    const conversation=await page.locator('.conversation-preview').boundingBox();
-    if(viewport.width>600) expect(voice!.x+voice!.width).toBeLessThan(conversation!.x);
+    const conversation=await page.locator('.session-panel').boundingBox();
+    if(viewport.width>700) expect(voice!.x+voice!.width).toBeLessThan(conversation!.x);
     else expect(voice!.y+voice!.height).toBeLessThan(conversation!.y);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     if(viewport.width>900){const nav=await page.locator('.workspace-nav>button').last().boundingBox();const engine=await page.locator('.ai-mode-control').boundingBox();expect(nav!.y+nav!.height).toBeLessThan(engine!.y);}

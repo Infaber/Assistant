@@ -106,6 +106,11 @@ class VoiceControls:
                         ),
                         "sample_text": SAMPLE,
                         "diagnostics": for_session(self.session).summary(),
+                        "response_times_ms": [
+                            row["milliseconds"]
+                            for row in for_session(self.session).samples
+                            if row["stage"] == "e2e_latency"
+                        ],
                         "backchannel_audio_supported": False,
                     }
                 )

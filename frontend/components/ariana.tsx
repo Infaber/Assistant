@@ -38,6 +38,7 @@ import {
   X,
 } from "lucide-react";
 import { assistantName } from "../lib/persona";
+import SessionPanel from "./session-panel";
 import ArianaOrb, { orbStyles } from "./ariana-orb";
 import { useAIMode } from "./use-ai-mode";
 import { type AIMode } from "../lib/ai-mode";
@@ -256,14 +257,14 @@ function Workspace({
         : agent.state === "failed"
           ? "Agent unavailable"
           : agent.state === "speaking"
-            ? `${assistantName} is speaking`
+            ? "Speaking"
             : agent.state === "thinking"
-              ? "Thinking it through"
+              ? "Thinking"
               : !agent.isConnected
                 ? `Finding ${assistantName}`
                 : isMicrophoneEnabled
-                  ? "Listening to you"
-                  : "Ready for your message";
+                  ? "Listening"
+                  : "Ready";
 
   function revealInput() {
     setInputOpen(true);
@@ -786,16 +787,15 @@ function Workspace({
         }
       }}
     >
-      <header className="workspace-brand"><span className="brand-mark"><AudioLines size={22} /></span><h1>{assistantName}<small>A.R.I.A.N.A / SYSTEM</small></h1></header>
-      <header className="workspace-header"><div><span className="section-kicker">{assistantName.toUpperCase()} / YOUR SPACE</span><h2>Personal interface</h2></div><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span></header>
+      <header className="workspace-brand"><h1>{assistantName}</h1></header>
+      <header className="workspace-header"><span className={`connection-pill ${connected ? "is-connected" : ""}`}><i />{connected ? "Connected" : connecting ? "Connecting" : "Not connected"}</span><button className="icon-button" ref={settingsButton} aria-label="Settings" onClick={() => dialog.current?.showModal()}><Settings2 size={24}/></button></header>
       <nav className="workspace-nav" aria-label="Workspace">
-        <span className="section-kicker">SYSTEM CHANNELS</span>
-        <button className="nav-current" onClick={() => { if (inputOpen) setInputOpen(false); }}><AudioLines size={18} /> Voice space <span>01</span></button>
-        <button onClick={() => history.current?.showModal()}><MessageSquare size={18} /> Conversation <span>{conversation.length || "—"}</span></button>
-        <button onClick={() => dialog.current?.showModal()}><Settings2 size={18} /> Preferences</button>
-        <div className="rail-note"><ShieldCheck size={19}/><strong>System access</strong><p>Voice and text channels ready. App actions follow your approval settings.</p></div>
+        <button className="nav-current" aria-label="Voice space" title="Voice space" onClick={() => setInputOpen(false)}><MessageSquare size={23}/></button>
+        <button aria-label="Conversation" title="Conversation" onClick={() => history.current?.showModal()}><AudioLines size={23}/></button>
+        <button aria-label="Preferences" title="Preferences" onClick={() => dialog.current?.showModal()}><Monitor size={23}/></button>
       </nav>
-      <div className="ai-mode-control" aria-label="AI mode"><span className="section-kicker">NEURAL ENGINE</span>
+      <SessionPanel participant={localParticipant} destination={agent.identity} ready={connected && agent.isConnected} mode={ai.status?.mode} microphone={isMicrophoneEnabled} wakeState={wakeState}>
+      <div className="ai-mode-control" aria-label="AI mode"><span className="section-kicker">ENGINE</span>
         <div className="ai-mode-segments">
           <button aria-pressed={selectedMode==="normal"} disabled={ai.pending} onClick={()=>void ai.change("normal", carryContext).finally(()=>setCarryContext(false))}>Normal</button>
           <button aria-pressed={selectedMode==="local"} disabled={ai.pending} onClick={()=>void ai.change("local", carryContext).finally(()=>setCarryContext(false))}>Unrestricted</button>
@@ -805,7 +805,8 @@ function Workspace({
         <label><input type="checkbox" checked={carryContext} disabled={ai.pending} onChange={event=>setCarryContext(event.target.checked)} /> Keep recent conversation for the next switch</label>
         <details><summary>Mode privacy</summary>Conversation transfer is off by default. Enabling it shares up to 24 recent text messages with the selected engine, including Gemini when switching to Normal. Images, attachments, tool results and pending approvals are excluded. Staged attachments are discarded. Saved memories are shared and retrieved when relevant. Local speech and AI stay on your Mac, but LiveKit Cloud still carries the session. Local has no image analysis.</details>
       </div>
-      <section className="voice-space" aria-label="Voice space"><div className="voice-space-label"><AudioLines size={16}/> VOICE INTERFACE <span>SESSION LINK</span></div>
+      </SessionPanel>
+      <section className="voice-space" aria-label="Voice space">
       {listeningCues!=="off" && connected && isMicrophoneEnabled && !outputActive && inputLevel>0.025 && <div className={`listening-cue ${listeningCues}`} role="status" style={{opacity:Math.min(1,0.45+inputLevel)}}>Listening</div>}
       <div className="orb-center">
         <button
@@ -845,11 +846,43 @@ function Workspace({
         </p>
       </div>
       <section className="conversation-status" aria-label="Conversation state" aria-live="polite">
-        <span className="eyebrow">{connected ? "HERE WITH YOU" : "READY WHEN YOU ARE"}</span>
         <h2>{issue ? (/permission|denied|allow microphone/i.test(issue) ? "Microphone denied" : "Error") : status}</h2>
-        <p>{wakeState === "Activating" ? "Wait for Listening, then say your command." : isMicrophoneEnabled ? "Conversation microphone is on. You can interrupt at any time." : "Conversation microphone is off. Local wake detection may still be listening if enabled."}</p>
+        <p>{wakeState === "Activating" ? "Wait for Listening, then say your command." : isMicrophoneEnabled ? "Take your time." : "Conversation microphone is off. Type, or turn it on to talk."}</p>
         {wakeState === "Activating" && <button onClick={() => window.dispatchEvent(new Event("ariana:standby"))}>Cancel activation</button>}
       </section>
+      <StartAudio label={`Enable ${assistantName}’s audio`} className="enable-audio" />
+      {issue && (
+        <div className="error-banner" role="alert">
+          <p tabIndex={0} aria-label="Error details">{issue}</p>
+          <button
+            onClick={() => {
+              setError("");
+              setProviderError("");
+              if (connected || connecting) void end();
+              else void start();
+            }}
+          >
+            {connected || connecting ? "End session" : "Retry"}
+          </button>
+          <button
+            aria-label="Dismiss error"
+            onClick={() => {
+              setError("");
+              setProviderError("");
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      </section>
+      <section className="conversation-preview" aria-label="Recent conversation" aria-live="polite" aria-relevant="additions text">
+        <span className="section-kicker">LAST RESPONSE</span>
+        {conversation.filter(message => message.isAgent).slice(-1).map(message => <article key={message.id}><p>{message.message}</p></article>)}
+        {!conversation.some(message => message.isAgent) && <p className="response-placeholder">A little space to think together.</p>}
+      </section>
+      <div className="composer-dock">
+      <button className={`message-launcher ${inputOpen ? "launcher-hidden" : ""}`} onClick={revealInput}><span>Ask {assistantName} anything</span><kbd>⌘ K</kbd></button>
       <div className="quiet-controls">
         <button
           className="icon-button primary-voice-action"
@@ -879,50 +912,8 @@ function Workspace({
           )}
           <span>{connected ? isMicrophoneEnabled ? "Mute microphone" : "Resume listening" : "Start conversation"}</span>
         </button>
-        <button
-          className="icon-button"
-          ref={settingsButton}
-          aria-label="Settings"
-          onClick={() => dialog.current?.showModal()}
-        >
-          <Settings2 size={19} />
-        </button>
       </div>
-      <StartAudio label={`Enable ${assistantName}’s audio`} className="enable-audio" />
-      {issue && (
-        <div className="error-banner" role="alert">
-          <p tabIndex={0} aria-label="Error details">{issue}</p>
-          <button
-            onClick={() => {
-              setError("");
-              setProviderError("");
-              if (connected || connecting) void end();
-              else void start();
-            }}
-          >
-            {connected || connecting ? "End session" : "Retry"}
-          </button>
-          <button
-            aria-label="Dismiss error"
-            onClick={() => {
-              setError("");
-              setProviderError("");
-            }}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      <div className="voice-space-footer"><span><i />{isMicrophoneEnabled ? "Microphone on" : "Microphone off"}</span><button onClick={revealInput}>Type instead <span>⌘ K</span></button></div>
-      </section>
-      <section className="conversation-preview" aria-label="Recent conversation" aria-live="polite" aria-relevant="additions text">
-        <header className="conversation-panel-header"><div><span className="section-kicker">SESSION / LIVE TEXT</span><h2>Conversation</h2></div><MessageSquare size={18} /></header>
-        {conversation.length > 0 && <button className="conversation-history-link" onClick={() => history.current?.showModal()}>View full conversation &amp; activity</button>}
-        {conversation.length ? conversation.slice(-3).map(message => <article key={message.id}>
-          <span>{message.isAgent ? assistantName : "You"}</span><p>{message.message}</p>
-        </article>) : <div className="conversation-empty"><span className="empty-symbol"><MessageSquare size={25}/></span><h3>Awaiting your signal.</h3><p>Voice or text. Ask, explore, or take control. This session’s conversation appears here.</p><button onClick={revealInput}>Write a message <ArrowUpRight size={16}/></button></div>}
-      </section>
-      <button className={`message-launcher ${inputOpen ? "launcher-hidden" : ""}`} onClick={revealInput}><MessageSquare size={18}/><span>Enter a message or command…</span><kbd>⌘ K</kbd><span className="launcher-arrow"><ArrowUpRight size={18}/></span></button>
+      </div>
       <div
         className={`input-overlay ${inputOpen ? "input-open" : ""}`}
         inert={!inputOpen}

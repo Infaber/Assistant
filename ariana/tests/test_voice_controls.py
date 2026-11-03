@@ -306,3 +306,22 @@ async def test_status_reports_running_engine_not_saved_preferences(tmp_path):
     b.session.current_agent.ai_mode = "local"
     await invoke(b, "save", values={"google_voice": "Leda"})
     assert (await invoke(b, "status"))["mode"] == "local"
+
+
+@pytest.mark.asyncio
+async def test_response_chart_exposes_only_bounded_numeric_response_times(tmp_path):
+    from performance import for_session
+
+    b = controls(tmp_path)
+    performance = for_session(b.session)
+    performance.record("tool_execution", 9)
+    performance.record("e2e_latency", 1.4)
+    performance.record("e2e_latency", 0.9)
+    status = await invoke(b, "status")
+    assert status["response_times_ms"] == [1400, 900]
+    assert status["diagnostics"]["e2e_latency"]["samples"] == 2
+    for _ in range(110):
+        performance.record("e2e_latency", 1)
+    status = await invoke(b, "status")
+    assert status["response_times_ms"] == [1000] * 100
+    b.session.generate_reply.assert_not_called()
